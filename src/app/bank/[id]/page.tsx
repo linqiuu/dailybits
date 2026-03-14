@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BankDetailClient } from "./bank-detail-client";
+import { SubscriptionPanel } from "@/components/bank/subscription-panel";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -34,6 +34,42 @@ export default async function BankDetailPage({ params }: PageProps) {
 
   const isCreator = session?.user?.id === bank.creatorId;
 
+  let initialSubscription: {
+    id: string;
+    pushTimes: string[];
+    isActive: boolean;
+  } | null = null;
+  let pushedCount = 0;
+
+  if (session?.user?.id && !isCreator) {
+    const [sub, pushed] = await Promise.all([
+      prisma.subscription.findUnique({
+        where: {
+          userId_bankId: {
+            userId: session.user.id,
+            bankId: id,
+          },
+        },
+      }),
+      prisma.pushLog.findMany({
+        where: {
+          userId: session.user.id,
+          question: { bankId: id },
+        },
+        select: { questionId: true },
+        distinct: ["questionId"],
+      }),
+    ]);
+    if (sub) {
+      initialSubscription = {
+        id: sub.id,
+        pushTimes: sub.pushTimes,
+        isActive: sub.isActive,
+      };
+    }
+    pushedCount = pushed.length;
+  }
+
   return (
     <div className="page-enter space-y-6">
       <BankDetailClient
@@ -49,6 +85,14 @@ export default async function BankDetailPage({ params }: PageProps) {
         }}
         isCreator={isCreator}
       />
+      {!isCreator && session?.user?.id && (
+        <SubscriptionPanel
+          bankId={bank.id}
+          initialSubscription={initialSubscription}
+          totalQuestions={bank._count.questions}
+          pushedCount={pushedCount}
+        />
+      )}
     </div>
   );
 }
