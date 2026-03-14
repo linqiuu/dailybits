@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BankCard } from "./bank-card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
 
 interface Bank {
   id: string;
@@ -70,14 +72,7 @@ export function BankExplorer() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-32 animate-pulse rounded-xl bg-muted"
-            />
-          ))}
-        </div>
+        <SkeletonCardGrid />
       ) : data?.banks.length ? (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -119,10 +114,17 @@ export function BankExplorer() {
             </div>
           )}
         </>
+      ) : debouncedSearch ? (
+        <EmptyState
+          title="未找到相关题库"
+          description="尝试其他关键词，或创建新的题库"
+        />
       ) : (
-        <p className="py-12 text-center text-muted-foreground">
-          暂无题库，快来创建第一个吧
-        </p>
+        <EmptyState
+          title="尚无题库，成为第一个创建者"
+          description="创建你的第一个题库，开始每日一题"
+          action={{ label: "创建题库", href: "/bank/new" }}
+        />
       )}
 
       <Button
