@@ -27,7 +27,7 @@ export default function DashboardPage() {
 
   return (
     <div className="page-enter space-y-8">
-      <h1 className="font-serif text-2xl font-semibold">我的书房</h1>
+      <h1 className="font-serif text-3xl font-semibold tracking-wide text-foreground">我的书房</h1>
       <StatsCards />
       <SubscriptionList />
       <PushHistory />

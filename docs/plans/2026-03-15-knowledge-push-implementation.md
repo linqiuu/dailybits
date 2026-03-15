@@ -417,17 +417,18 @@ git commit -m "feat: configure NextAuth with GitHub OAuth and JWT session"
 
 @layer base {
   :root {
-    --bg-primary: #FAF6F1;
-    --bg-secondary: #F3EDE4;
-    --bg-accent: #EBE3D5;
-    --text-primary: #2C2418;
-    --text-secondary: #6B5E4F;
-    --text-muted: #A39888;
-    --accent: #8B6914;
-    --accent-hover: #A37E1F;
-    --accent-subtle: #D4C5A0;
-    --border: #D8CEBC;
-    --shadow: rgba(139, 105, 20, 0.06);
+    --bg-primary: #F5F2EC;
+    --bg-secondary: #FFFFFF;
+    --bg-accent: #ECE5DB;
+    --text-primary: #2C3036;
+    --text-secondary: #5C646F;
+    --text-muted: #8A8175;
+    --accent: #8A3B33;      /* 朱砂主色 */
+    --accent-hover: #7A2F28;
+    --accent-subtle: #EAD8D2;
+    --accent-secondary: #2F4B66; /* 石青辅助色 */
+    --border: #DCCFC0;
+    --shadow: rgba(44, 48, 54, 0.08);
     --success: #5B7A3A;
     --error: #A0522D;
 
@@ -581,7 +582,7 @@ git commit -m "feat: implement literary bookish theme with global layout, header
 修改 `src/app/page.tsx`：
 
 衬线体大标题 "探索题库"，副标题 "每日一题，温故知新"。
-搜索框（底部单线风格）+ 双列卡片网格 + 分页 + 右下角浮动"创建题库"按钮。
+搜索框（浅底色 + 微圆角 + 左侧放大镜图标）+ 双列卡片网格 + 分页 + 右下角浮动"创建题库"按钮。
 
 **Step 5: 创建题库页 UI**
 
@@ -1115,12 +1116,12 @@ git commit -m "feat: implement personal dashboard with stats, subscription manag
 
 **Step 1: 空状态处理**
 
-为所有列表页添加空状态 UI：
+为所有列表页添加空状态 UI（插画 + 引导文案 + CTA）：
 - 发现页无题库："尚无题库，成为第一个创建者"
-- 订阅列表为空："书房尚空，去发现页探索题库"
-- 推送历史为空："暂无推送记录"
+- 订阅列表为空："书房空空如也，去探索一些有趣的题库"
+- 推送历史为空："泡一杯茶，订阅后系统会按你设定时间送来今日一题"
 
-使用文艺风的引用文字样式。
+使用书卷主题的浅卡片容器，搭配简笔线稿（书本/茶杯/阅读者）提升情感化体验。
 
 **Step 2: Loading 状态**
 

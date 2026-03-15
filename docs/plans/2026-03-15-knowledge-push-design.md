@@ -259,18 +259,19 @@ interface PushPayload {
 
 | 变量 | 值 | 用途 |
 |---|---|---|
-| --bg-primary | #FAF6F1 | 米白/羊皮纸底色 |
-| --bg-secondary | #F3EDE4 | 卡片底色 |
-| --bg-accent | #EBE3D5 | Hover 状态 |
-| --text-primary | #2C2418 | 正文 |
-| --text-secondary | #6B5E4F | 副文本 |
-| --text-muted | #A39888 | 提示/禁用 |
-| --accent | #8B6914 | 重要操作/链接 |
-| --accent-hover | #A37E1F | Hover |
-| --accent-subtle | #D4C5A0 | 标签底色 |
-| --border | #D8CEBC | 边线 |
-| --success | #5B7A3A | 正确/成功 |
-| --error | #A0522D | 错误/警告 |
+| --bg-primary | #F5F2EC | 页面底色（纸案米灰） |
+| --bg-secondary | #FFFFFF | 卡片底色（宣纸白） |
+| --bg-accent | #ECE5DB | 弱强调背景 |
+| --text-primary | #2C3036 | 焦墨正文 |
+| --text-secondary | #5C646F | 次级说明 |
+| --text-muted | #8A8175 | 提示/禁用 |
+| --accent | #8A3B33 | 朱砂主色（主按钮/关键状态） |
+| --accent-hover | #7A2F28 | 主色 hover |
+| --accent-subtle | #EAD8D2 | 朱砂浅底 |
+| --accent-secondary | #2F4B66 | 石青辅助色（标签/序号） |
+| --border | #DCCFC0 | 边线 |
+| --success | #526E3F | 正确/成功 |
+| --error | #A0483D | 错误/警告 |
 
 ### 8.3 字体
 
@@ -280,9 +281,9 @@ interface PushPayload {
 
 ### 8.4 组件语言
 
-- 卡片：圆角 8px，暖色投影，hover 微妙上浮
+- 卡片：圆角 8px，浅边框 + 大范围柔和投影，hover 微上浮（纸张悬浮感）
 - 按钮：克制设计，主按钮 accent 色，次按钮描边，无渐变
-- 输入框：底部单线，focus 变 accent 色
+- 输入框：浅底色容器 + 微圆角 + 图标前缀，focus 强化 ring
 - 分隔：虚线或极淡实线
 - 动画：淡入 + translateY(8px)，300ms
 

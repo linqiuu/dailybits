@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
+    const session = await getServerSession(authOptions);
+
     const [banks, total] = await Promise.all([
       prisma.questionBank.findMany({
         where,
@@ -40,13 +42,26 @@ export async function GET(request: NextRequest) {
       prisma.questionBank.count({ where }),
     ]);
 
+    let subscribedBankIds: Set<string> = new Set();
+    if (session?.user?.id) {
+      const subs = await prisma.subscription.findMany({
+        where: { userId: session.user.id, isActive: true },
+        select: { bankId: true },
+      });
+      subscribedBankIds = new Set(subs.map((s) => s.bankId));
+    }
+
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
     return NextResponse.json({
-      banks,
+      banks: banks.map((b) => ({
+        ...b,
+        isSubscribed: subscribedBankIds.has(b.id),
+      })),
       total,
       page,
       totalPages,
+      isLoggedIn: !!session?.user?.id,
     });
   } catch (error) {
     console.error("[GET /api/banks]", error);

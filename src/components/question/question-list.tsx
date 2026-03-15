@@ -7,7 +7,6 @@ import {
   Tabs,
   TabsList,
   TabsTrigger,
-  TabsContent,
 } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -19,6 +18,7 @@ import {
 import { QuestionForm, type EditingQuestion } from "@/components/question/question-form";
 import { toast } from "sonner";
 import { Pencil, Trash2, Send } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type QuestionStatus = "DRAFT" | "PUBLISHED";
 
@@ -149,7 +149,7 @@ export function QuestionList({ bankId, isCreator }: QuestionListProps) {
   if (!isCreator) return null;
 
   return (
-    <div className="space-y-4 font-serif">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
           <TabsList variant="line">
@@ -176,10 +176,10 @@ export function QuestionList({ bankId, isCreator }: QuestionListProps) {
       ) : filtered.length === 0 ? (
         <p className="text-muted-foreground text-sm">暂无题目</p>
       ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border bg-muted/30">
+              <tr className="border-b border-border bg-secondary/50">
                 <th className="px-4 py-2 text-left font-medium w-12">#</th>
                 <th className="px-4 py-2 text-left font-medium">题目</th>
                 <th className="px-4 py-2 text-left font-medium w-24">状态</th>
@@ -190,9 +190,21 @@ export function QuestionList({ bankId, isCreator }: QuestionListProps) {
               {filtered.map((q, i) => (
                 <tr
                   key={q.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20"
+                  className={cn(
+                    "border-b border-border last:border-0 hover:bg-primary/5",
+                    i % 2 === 0 ? "bg-card" : "bg-secondary/25"
+                  )}
                 >
-                  <td className="px-4 py-2 text-muted-foreground">{i + 1}</td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    <span
+                      className={cn(
+                        "inline-flex min-w-7 items-center justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold",
+                        i % 2 === 0 ? "bg-primary/12 text-primary" : "bg-accent/12 text-accent"
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                  </td>
                   <td className="px-4 py-2">{truncate(q.content)}</td>
                   <td className="px-4 py-2">
                     <Badge

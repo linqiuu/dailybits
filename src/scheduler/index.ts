@@ -2,13 +2,50 @@ import "dotenv/config";
 import cron from "node-cron";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
+import Holidays from "date-holidays";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
+const holidayCalendar = new Holidays(process.env.HOLIDAY_COUNTRY ?? "CN");
+const skipNonWorkingDays = process.env.SKIP_NON_WORKING_DAYS !== "false";
+
+interface PushPayload {
+  receiver: string;
+  question: string;
+  options: string[];
+  correctAnswer: string;
+  explanation: string;
+}
 
 function getCurrentTimeHHMM(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function shouldSkipPushToday(date: Date): {
+  skip: boolean;
+  reason?: "weekend" | "holiday";
+  holidayName?: string;
+} {
+  if (!skipNonWorkingDays) {
+    return { skip: false };
+  }
+
+  const day = date.getDay();
+  if (day === 0 || day === 6) {
+    return { skip: true, reason: "weekend" };
+  }
+
+  const holiday = holidayCalendar.isHoliday(date);
+  if (holiday) {
+    return {
+      skip: true,
+      reason: "holiday",
+      holidayName: Array.isArray(holiday) ? holiday[0]?.name : holiday.name,
+    };
+  }
+
+  return { skip: false };
 }
 
 async function selectQuestion(userId: string, bankId: string) {
@@ -34,7 +71,7 @@ async function selectQuestion(userId: string, bankId: string) {
   });
 }
 
-async function pushToTarget(payload: any): Promise<boolean> {
+async function pushToTarget(payload: PushPayload): Promise<boolean> {
   const url = process.env.PUSH_API_URL;
   if (!url) {
     console.log("[PUSH MOCK]", JSON.stringify(payload, null, 2));
@@ -49,6 +86,19 @@ async function pushToTarget(payload: any): Promise<boolean> {
 }
 
 cron.schedule("* * * * *", async () => {
+  const now = new Date();
+  const skipDecision = shouldSkipPushToday(now);
+  if (skipDecision.skip) {
+    if (skipDecision.reason === "holiday") {
+      console.log(
+        `[Scheduler] Skip push on holiday: ${skipDecision.holidayName ?? "Unknown holiday"}`
+      );
+    } else {
+      console.log("[Scheduler] Skip push on weekend");
+    }
+    return;
+  }
+
   const currentTime = getCurrentTimeHHMM();
   console.log(`[Scheduler] Tick at ${currentTime}`);
 

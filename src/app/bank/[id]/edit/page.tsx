@@ -91,6 +91,19 @@ function FileUploadPanel({
 
   return (
     <div className="space-y-6 font-serif">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3">
+        <p className="text-sm text-muted-foreground">
+          先下载模板填写题目，再上传导入，格式更稳定。
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          render={<a href="/api/banks/template/excel" download />}
+          nativeButton={false}
+        >
+          下载 Excel 模板
+        </Button>
+      </div>
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}

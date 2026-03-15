@@ -1,5 +1,5 @@
 const JINA_READER_BASE = "https://r.jina.ai";
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 export interface JinaFetchOptions {
   timeout?: number;
@@ -14,8 +14,7 @@ export async function fetchUrlAsMarkdown(
   options: JinaFetchOptions = {}
 ): Promise<string> {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
-  const encoded = encodeURIComponent(url);
-  const readerUrl = `${JINA_READER_BASE}/${encoded}`;
+  const readerUrl = `${JINA_READER_BASE}/${url}`;
 
   const headers: Record<string, string> = {
     Accept: "text/plain",

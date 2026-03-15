@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface SubscriptionItem {
   id: string;
@@ -53,11 +54,12 @@ export function SubscriptionList() {
     return (
       <div className="space-y-4">
         <h2 className="font-serif text-xl font-semibold">我的订阅</h2>
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            暂无订阅，去发现题库订阅吧
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="书房空空如也"
+          description="去探索一些有趣的题库，挑几本加入你的每日书单吧。"
+          illustration="book"
+          action={{ label: "去发现题库", href: "/" }}
+        />
       </div>
     );
   }
@@ -66,13 +68,17 @@ export function SubscriptionList() {
     <div className="space-y-4">
       <h2 className="font-serif text-xl font-semibold">我的订阅</h2>
       <div className="space-y-3">
-        {subscriptions.map((sub) => {
+        {subscriptions.map((sub, index) => {
           const total = sub.questionCount;
           const pushed = sub.pushedCount;
           const pct = total > 0 ? Math.min(100, (pushed / total) * 100) : 0;
 
           return (
-            <Card key={sub.id} className="card-hover">
+            <Card
+              key={sub.id}
+              className="paper-rise card-hover"
+              style={{ animationDelay: `${index * 70}ms` }}
+            >
               <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div className="space-y-2">
                   <CardTitle className="font-serif text-base">

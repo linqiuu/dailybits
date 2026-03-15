@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 function MenuIcon() {
   return (
@@ -30,6 +32,7 @@ function MenuIcon() {
 export function Header() {
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
 
   const navLinks = [
     { href: "/", label: "发现" },
@@ -49,7 +52,12 @@ export function Header() {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className={cn(
+                "relative text-sm transition-colors after:absolute after:-bottom-[6px] after:left-0 after:h-[2px] after:w-full after:origin-center after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform",
+                pathname === link.href
+                  ? "text-foreground after:scale-x-100"
+                  : "text-muted-foreground hover:text-foreground hover:after:scale-x-60"
+              )}
             >
               {link.label}
             </Link>
@@ -78,7 +86,7 @@ export function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button size="sm" variant="outline" className="border-primary/30 text-primary hover:bg-primary/5" render={<Link href="/login" />}>
+            <Button size="sm" variant="outline" className="border-primary/30 text-primary hover:bg-primary/5" render={<Link href="/login" />} nativeButton={false}>
               登录
             </Button>
           )}
@@ -97,7 +105,12 @@ export function Header() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setOpen(false)}
-                  className="text-base text-muted-foreground transition-colors hover:text-foreground"
+                  className={cn(
+                    "text-base transition-colors",
+                    pathname === link.href
+                      ? "font-medium text-primary"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
                   {link.label}
                 </Link>

@@ -22,9 +22,10 @@ interface BankDetailClientProps {
     questionCount: number;
   };
   isCreator: boolean;
+  subscriptionSlot?: React.ReactNode;
 }
 
-export function BankDetailClient({ bank, isCreator }: BankDetailClientProps) {
+export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDetailClientProps) {
   const router = useRouter();
 
   async function handleDelete() {
@@ -70,6 +71,12 @@ export function BankDetailClient({ bank, isCreator }: BankDetailClientProps) {
           )}
         </CardHeader>
       </Card>
+
+      {subscriptionSlot && (
+        <div className="rounded-lg border-2 border-primary/20 bg-primary/[0.03]">
+          {subscriptionSlot}
+        </div>
+      )}
 
       <Card>
         <CardHeader>

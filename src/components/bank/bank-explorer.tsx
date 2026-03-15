@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { BankCard } from "./bank-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
+import { Search } from "lucide-react";
 
 interface Bank {
   id: string;
@@ -16,6 +17,7 @@ interface Bank {
   subscriberCount: number;
   creator: { id: string; name: string | null; image: string | null };
   _count: { questions: number };
+  isSubscribed?: boolean;
 }
 
 interface ApiResponse {
@@ -23,6 +25,7 @@ interface ApiResponse {
   total: number;
   page: number;
   totalPages: number;
+  isLoggedIn?: boolean;
 }
 
 export function BankExplorer() {
@@ -33,12 +36,14 @@ export function BankExplorer() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => {
+      setLoading(true);
+      setDebouncedSearch(search);
+    }, 300);
     return () => clearTimeout(t);
   }, [search]);
 
   useEffect(() => {
-    setLoading(true);
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("search", debouncedSearch);
     params.set("page", String(page));
@@ -63,28 +68,35 @@ export function BankExplorer() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Input
-          placeholder="搜索题库..."
-          value={search}
-          onChange={handleSearchChange}
-          className="border-0 border-b rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-        />
+        <div className="relative w-full">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="搜索题库..."
+            value={search}
+            onChange={handleSearchChange}
+            className="h-10 rounded-xl border-border/80 bg-card pl-10 pr-3 shadow-[0_3px_10px_rgba(44,48,54,0.05)] focus-visible:ring-primary/25"
+          />
+        </div>
       </div>
 
       {loading ? (
         <SkeletonCardGrid />
       ) : data?.banks.length ? (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {data.banks.map((bank) => (
-              <BankCard
-                key={bank.id}
-                id={bank.id}
-                title={bank.title}
-                creator={bank.creator}
-                questionCount={bank._count.questions}
-                subscriberCount={bank.subscriberCount}
-              />
+          <div className="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {data.banks.map((bank, index) => (
+              <div key={bank.id} className="w-full max-w-sm">
+                <BankCard
+                  id={bank.id}
+                  title={bank.title}
+                  creator={bank.creator}
+                  questionCount={bank._count.questions}
+                  subscriberCount={bank.subscriberCount}
+                  isLoggedIn={data?.isLoggedIn}
+                  isSubscribed={bank.isSubscribed}
+                  appearDelayMs={index * 70}
+                />
+              </div>
             ))}
           </div>
 
@@ -93,7 +105,10 @@ export function BankExplorer() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => {
+                  setLoading(true);
+                  setPage((p) => Math.max(1, p - 1));
+                }}
                 disabled={page <= 1}
               >
                 上一页
@@ -104,9 +119,10 @@ export function BankExplorer() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setPage((p) => Math.min(data.totalPages, p + 1))
-                }
+                onClick={() => {
+                  setLoading(true);
+                  setPage((p) => Math.min(data.totalPages, p + 1));
+                }}
                 disabled={page >= data.totalPages}
               >
                 下一页

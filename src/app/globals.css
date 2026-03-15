@@ -56,44 +56,44 @@
   --font-body: var(--font-noto-sans-sc), "Noto Sans SC", sans-serif;
   --font-code: "JetBrains Mono", "Fira Code", monospace;
 
-  --background: #FAF6F1;
-  --foreground: #2C2418;
-  --card: #F3EDE4;
-  --card-foreground: #2C2418;
-  --popover: #F3EDE4;
-  --popover-foreground: #2C2418;
-  --primary: #8B6914;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EBE3D5;
-  --secondary-foreground: #2C2418;
-  --muted: #EBE3D5;
-  --muted-foreground: #A39888;
-  --accent: #EBE3D5;
-  --accent-foreground: #2C2418;
-  --destructive: #A0522D;
-  --border: #D8CEBC;
-  --input: #D8CEBC;
-  --ring: #8B6914;
+  --background: #F5F2EC;
+  --foreground: #2C3036;
+  --card: #FFFFFF;
+  --card-foreground: #2C3036;
+  --popover: #FCFAFA;
+  --popover-foreground: #2C3036;
+  --primary: #8A3B33;
+  --primary-foreground: #FFF9F5;
+  --secondary: #ECE5DB;
+  --secondary-foreground: #2C3036;
+  --muted: #F0EAE0;
+  --muted-foreground: #7A7269;
+  --accent: #2F4B66;
+  --accent-foreground: #F4EFE7;
+  --destructive: #A0483D;
+  --border: #DCCFC0;
+  --input: #D6C9BA;
+  --ring: #8A3B33;
   --radius: 0.5rem;
 
-  --success: #5B7A3A;
-  --error: #A0522D;
-  --text-muted: #A39888;
+  --success: #526E3F;
+  --error: #A0483D;
+  --text-muted: #8A8175;
 
-  --chart-1: #8B6914;
-  --chart-2: #A37E1F;
-  --chart-3: #D4C5A0;
-  --chart-4: #5B7A3A;
+  --chart-1: #8A3B33;
+  --chart-2: #2F4B66;
+  --chart-3: #BFA58E;
+  --chart-4: #526E3F;
   --chart-5: #6B5E4F;
 
-  --sidebar: #F3EDE4;
-  --sidebar-foreground: #2C2418;
-  --sidebar-primary: #8B6914;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EBE3D5;
-  --sidebar-accent-foreground: #2C2418;
-  --sidebar-border: #D8CEBC;
-  --sidebar-ring: #8B6914;
+  --sidebar: #F8F4EE;
+  --sidebar-foreground: #2C3036;
+  --sidebar-primary: #8A3B33;
+  --sidebar-primary-foreground: #FFF9F5;
+  --sidebar-accent: #ECE5DB;
+  --sidebar-accent-foreground: #2C3036;
+  --sidebar-border: #DCCFC0;
+  --sidebar-ring: #8A3B33;
 }
 
 @layer base {
@@ -103,6 +103,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    background-image: radial-gradient(circle at top right, rgba(138, 59, 51, 0.06), transparent 40%);
   }
   html {
     @apply font-sans;
@@ -128,12 +129,28 @@
     }
   }
 
+  .paper-rise {
+    animation: paperRise 420ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+  }
+
+  @keyframes paperRise {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   .card-hover {
+    box-shadow: 0 10px 24px rgba(44, 48, 54, 0.05), 0 2px 8px rgba(138, 59, 51, 0.08);
     transition: box-shadow 200ms ease, transform 200ms ease;
   }
   .card-hover:hover {
-    box-shadow: 0 4px 20px rgba(139, 105, 20, 0.1);
-    transform: translateY(-1px);
+    box-shadow: 0 16px 32px rgba(44, 48, 54, 0.08), 0 6px 14px rgba(138, 59, 51, 0.12);
+    transform: translateY(-2px);
   }
 
   .divider-literary {

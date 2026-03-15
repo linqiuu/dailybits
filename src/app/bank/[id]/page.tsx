@@ -41,7 +41,7 @@ export default async function BankDetailPage({ params }: PageProps) {
   } | null = null;
   let pushedCount = 0;
 
-  if (session?.user?.id && !isCreator) {
+  if (session?.user?.id) {
     const [sub, pushed] = await Promise.all([
       prisma.subscription.findUnique({
         where: {
@@ -84,15 +84,17 @@ export default async function BankDetailPage({ params }: PageProps) {
           questionCount: bank._count.questions,
         }}
         isCreator={isCreator}
+        subscriptionSlot={
+          session?.user?.id ? (
+            <SubscriptionPanel
+              bankId={bank.id}
+              initialSubscription={initialSubscription}
+              totalQuestions={bank._count.questions}
+              pushedCount={pushedCount}
+            />
+          ) : null
+        }
       />
-      {!isCreator && session?.user?.id && (
-        <SubscriptionPanel
-          bankId={bank.id}
-          initialSubscription={initialSubscription}
-          totalQuestions={bank._count.questions}
-          pushedCount={pushedCount}
-        />
-      )}
     </div>
   );
 }

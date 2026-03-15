@@ -49,25 +49,25 @@ export function StatsCards() {
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <Card className="card-hover">
+      <Card className="paper-rise card-hover" style={{ animationDelay: "20ms" }}>
         <CardContent className="pt-6">
-          <p className="font-serif text-3xl font-semibold text-foreground">
+          <p className="font-serif text-4xl font-semibold text-foreground sm:text-[2.2rem]">
             {s.subscribedCount}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">已订阅</p>
         </CardContent>
       </Card>
-      <Card className="card-hover">
+      <Card className="paper-rise card-hover" style={{ animationDelay: "90ms" }}>
         <CardContent className="pt-6">
-          <p className="font-serif text-3xl font-semibold text-foreground">
+          <p className="font-serif text-4xl font-semibold text-primary sm:text-[2.2rem]">
             {s.todayPushed} / {s.todayTotal}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">今日推送</p>
         </CardContent>
       </Card>
-      <Card className="card-hover">
+      <Card className="paper-rise card-hover" style={{ animationDelay: "160ms" }}>
         <CardContent className="pt-6">
-          <p className="font-serif text-3xl font-semibold text-foreground">
+          <p className="font-serif text-4xl font-semibold text-foreground sm:text-[2.2rem]">
             {s.createdBanksCount}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">我创建的</p>

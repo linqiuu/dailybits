@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface PushLogItem {
   pushedAt: string;
@@ -39,8 +40,6 @@ export function PushHistory() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   const fetchLogs = (p: number, append: boolean) => {
-    const fn = append ? setLoadingMore : setLoading;
-    fn(true);
     fetch(`/api/push/logs?page=${p}`)
       .then((res) => res.json())
       .then((data) => {
@@ -49,7 +48,13 @@ export function PushHistory() {
           setTotalPages(data.totalPages ?? 0);
         }
       })
-      .finally(() => fn(false));
+      .finally(() => {
+        if (append) {
+          setLoadingMore(false);
+        } else {
+          setLoading(false);
+        }
+      });
   };
 
   useEffect(() => {
@@ -59,6 +64,7 @@ export function PushHistory() {
   const loadMore = () => {
     const next = page + 1;
     if (next <= totalPages) {
+      setLoadingMore(true);
       setPage(next);
       fetchLogs(next, true);
     }
@@ -93,9 +99,12 @@ export function PushHistory() {
       <Card>
         <CardContent className="py-6">
           {logs.length === 0 ? (
-            <p className="py-4 text-center text-muted-foreground">
-              暂无推送记录
-            </p>
+            <EmptyState
+              title="暂无推送记录"
+              description="泡一杯茶，订阅后系统会按你设定的时间送来今日一题。"
+              illustration="tea"
+              action={{ label: "查看我的订阅", href: "/dashboard" }}
+            />
           ) : (
             <ul className="space-y-4">
               {logs.map((log, i) => (
