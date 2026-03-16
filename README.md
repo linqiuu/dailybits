@@ -99,6 +99,56 @@ npm run dev
 npm run scheduler
 ```
 
+## Docker 部署
+
+项目已提供容器化配置，可一键启动 `Web + Scheduler + PostgreSQL`。
+
+### 1. 准备环境变量
+
+```bash
+cp .env.example .env
+```
+
+至少补齐以下变量（推荐）：
+
+- `NEXTAUTH_SECRET`
+- `GITHUB_ID` / `GITHUB_SECRET`（如果使用 GitHub 登录）
+- `LLM_API_KEY`（如果使用 AI 生成能力）
+- `PUSH_API_URL`（如果接入推送服务）
+
+> `docker-compose.yml` 会将 `DATABASE_URL` 覆盖为容器内数据库地址：`postgresql://postgres:postgres@db:5432/dailybits?schema=public`。
+
+### 2. 构建并启动
+
+```bash
+docker compose up --build -d
+```
+
+默认服务：
+
+- `app`：Next.js Web 服务（`http://localhost:3000`）
+- `scheduler`：定时推送调度进程
+- `db`：PostgreSQL 16
+
+### 3. 查看日志
+
+```bash
+docker compose logs -f app
+docker compose logs -f scheduler
+```
+
+### 4. 停止服务
+
+```bash
+docker compose down
+```
+
+如需连同数据库数据卷一起删除：
+
+```bash
+docker compose down -v
+```
+
 ## 常用脚本
 
 - `npm run dev`：开发模式
