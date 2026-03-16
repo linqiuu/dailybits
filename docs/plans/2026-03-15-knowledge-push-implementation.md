@@ -12,6 +12,15 @@
 
 ---
 
+## 变更同步（2026-03-16）
+
+- 认证：`src/lib/auth.ts` 新增可选 `custom-oauth` Provider；`id/uid/name/email` 的映射集中在 `mapCustomOAuthProfile()`，可在内网按实际返回结构替换。
+- 环境变量：`.env.example` 新增 `CUSTOM_OAUTH_*` 配置，用于授权地址、token/userinfo 地址和 profile 字段映射。
+- 数据库：`User` 模型新增 `uid String? @unique`，并新增迁移 `20260316103000_add_user_uid`。
+- 推送目标：`receiver` 从 `userId` 调整为 `User.uid`（缺省回退 `userId`），`PushPayload` 新增 `title`（题库名称）。
+
+---
+
 ## Task 1: 项目脚手架搭建
 
 **Files:**

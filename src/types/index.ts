@@ -20,6 +20,7 @@ export interface GeneratedQuestion {
 
 export interface PushPayload {
   receiver: string;
+  title: string;
   question: string;
   options: string[];
   correctAnswer: string;

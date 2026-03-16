@@ -17,12 +17,12 @@ export async function POST(request: NextRequest) {
     if (userId && bankId) {
       subscription = await prisma.subscription.findUnique({
         where: { userId_bankId: { userId, bankId } },
-        include: { user: true },
+        include: { user: true, bank: true },
       });
     } else {
       subscription = await prisma.subscription.findFirst({
         where: { isActive: true },
-        include: { user: true },
+        include: { user: true, bank: true },
       });
     }
 
@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const payload = buildPayload(subscription.userId, question);
+    const receiver = subscription.user.uid ?? subscription.userId;
+    const payload = buildPayload(receiver, subscription.bank.title, question);
     const success = await pushToTarget(payload);
 
     if (success) {

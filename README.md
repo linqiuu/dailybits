@@ -1,69 +1,69 @@
 # DailyBits
 
-一个面向碎片化学习场景的知识推送平台：支持题库创建、AI 题目生成、多时段订阅推送和学习数据看板。  
-项目目标是把「内容沉淀 + 间隔复习 + 自动推送」整合到一个轻量、可扩展的系统里。
+DailyBits 是一个面向碎片化学习场景的知识推送平台，支持题库管理、AI 题目生成、多时段订阅推送与学习统计看板。
 
-## 功能概览
+## 项目目标
 
-- 题库管理：创建、编辑、删除、发布题目
-- 多种题目来源：手动录入、文本生成、文件导入、URL 解析
-- AI 生成链路：抽象 LLM Provider，可按环境变量切换模型服务
-- 订阅推送：用户可为题库配置多个推送时间点
-- 智能选题：优先推送未刷题目，兜底随机复习
-- 数据看板：展示订阅、推送与学习统计
+将「内容沉淀 + 间隔复习 + 自动推送」整合为轻量、可扩展、可二次开发的学习系统。
+
+## 核心能力
+
+- 题库管理：创建、编辑、删除与发布题目
+- 多源录入：手动输入、文本生成、文件导入、URL 解析
+- AI 抽象层：通过环境变量切换模型服务
+- 定时推送：支持一个订阅配置多个推送时间点
+- 智能选题：优先未推送题目，兜底随机复习
+- 数据看板：订阅、推送与学习统计
 
 ## 技术栈
 
-- 前端：Next.js (App Router) + TypeScript
-- UI：Tailwind CSS + shadcn/ui
-- 认证：NextAuth (GitHub OAuth)
-- 数据库：Supabase PostgreSQL
-- ORM：Prisma
-- 调度：node-cron (独立 scheduler 进程)
-- AI：可切换 Provider（OpenAI / DeepSeek / 其他兼容服务）
-- 内容解析：Jina Reader API + 文档/表格解析
+- Next.js (App Router) + TypeScript
+- Tailwind CSS + shadcn/ui
+- NextAuth（GitHub OAuth + 可选自定义 OAuth）
+- Prisma + PostgreSQL
+- node-cron（独立调度进程）
+- OpenAI / 兼容模型服务
 
-## 架构说明
+## 系统架构
 
-采用「单 Next.js 项目 + 独立调度进程」方案：
+采用「单 Next.js 应用 + 独立 Scheduler 进程」模式：
 
-- Web 层负责页面渲染与 API 路由
-- 业务能力沉淀在 `src/lib`
-- 调度器在 `src/scheduler/index.ts` 按分钟扫描订阅并触发推送
-- 应用与调度器共享 Prisma Client 和同一数据库
+- Web 层：页面与 API 路由
+- 业务层：`src/lib` 沉淀核心逻辑
+- 调度层：`src/scheduler/index.ts` 每分钟扫描订阅并触发推送
+- 数据层：应用与调度器共享同一数据库
 
 ## 目录结构
 
 ```text
 learn/
 ├── docs/plans/               # 设计与实现文档
-├── prisma/                   # Prisma schema
+├── prisma/                   # Prisma schema 与迁移
 ├── src/
-│   ├── app/                  # Next.js App Router 页面与 API
-│   ├── components/           # 业务组件 + UI 组件
-│   ├── lib/                  # 认证、LLM、推送、解析等核心逻辑
-│   └── scheduler/            # node-cron 调度入口
+│   ├── app/                  # 页面与 API
+│   ├── components/           # 业务组件与 UI 组件
+│   ├── lib/                  # 认证、推送、LLM、解析等核心逻辑
+│   └── scheduler/            # 定时调度入口
 ├── .env.example
+├── LICENSE
 └── package.json
 ```
 
 ## 快速开始
 
-### 1) 安装依赖
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 2) 配置环境变量
-
-复制模板并填写配置：
+### 2. 配置环境变量
 
 ```bash
 cp .env.example .env
 ```
 
-关键变量示例：
+关键变量：
 
 ```bash
 DATABASE_URL=""
@@ -71,6 +71,12 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET=""
 GITHUB_ID=""
 GITHUB_SECRET=""
+CUSTOM_OAUTH_CLIENT_ID=""
+CUSTOM_OAUTH_CLIENT_SECRET=""
+CUSTOM_OAUTH_AUTH_URL=""
+CUSTOM_OAUTH_TOKEN_URL=""
+CUSTOM_OAUTH_USERINFO_URL=""
+CUSTOM_OAUTH_SCOPE=""
 LLM_PROVIDER="openai"
 LLM_API_KEY=""
 LLM_API_BASE_URL=""
@@ -79,15 +85,15 @@ PUSH_API_URL=""
 JINA_API_KEY=""
 ```
 
-### 3) 启动开发服务
+### 3. 启动服务
 
 ```bash
 npm run dev
 ```
 
-默认访问：`http://localhost:3000`
+访问地址：`http://localhost:3000`
 
-### 4) 启动推送调度器（可选）
+### 4. 启动调度器（可选）
 
 ```bash
 npm run scheduler
@@ -95,26 +101,17 @@ npm run scheduler
 
 ## 常用脚本
 
-- `npm run dev`：启动开发环境
-- `npm run build`：构建生产包
-- `npm run start`：启动生产服务
-- `npm run lint`：运行 ESLint
-- `npm run scheduler`：启动定时推送进程
+- `npm run dev`：开发模式
+- `npm run build`：生产构建
+- `npm run start`：生产启动
+- `npm run lint`：代码检查
+- `npm run scheduler`：运行定时调度
 
-## 文档
+## 项目文档
 
 - 设计文档：`docs/plans/2026-03-15-knowledge-push-design.md`
 - 实现计划：`docs/plans/2026-03-15-knowledge-push-implementation.md`
 
-## Roadmap
+## 许可证
 
-- [x] MVP 设计与实现规划
-- [ ] 题库与题目核心流程完善
-- [ ] 推送链路稳定性与幂等性增强
-- [ ] 看板统计和复习策略优化
-- [ ] 播客学习场景（远期）
-
-## 开源说明
-
-当前仓库用于产品开发与验证，欢迎提 Issue/PR 参与改进。  
-如需对外发布，建议补充明确 License（如 MIT）与贡献规范（`CONTRIBUTING.md`）。
+本项目基于 [MIT License](./LICENSE) 开源。

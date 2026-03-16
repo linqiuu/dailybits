@@ -11,6 +11,7 @@ const skipNonWorkingDays = process.env.SKIP_NON_WORKING_DAYS !== "false";
 
 interface PushPayload {
   receiver: string;
+  title: string;
   question: string;
   options: string[];
   correctAnswer: string;
@@ -107,7 +108,7 @@ cron.schedule("* * * * *", async () => {
       isActive: true,
       pushTimes: { has: currentTime },
     },
-    include: { user: true },
+    include: { user: true, bank: true },
   });
 
   for (const sub of matchedSubs) {
@@ -115,8 +116,10 @@ cron.schedule("* * * * *", async () => {
       const question = await selectQuestion(sub.userId, sub.bankId);
       if (!question) continue;
 
+      const receiver = sub.user.uid ?? sub.userId;
       const payload = {
-        receiver: sub.userId,
+        receiver,
+        title: sub.bank.title,
         question: question.content,
         options: question.options as string[],
         correctAnswer: question.correctAnswer,

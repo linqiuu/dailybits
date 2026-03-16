@@ -43,6 +43,7 @@ model VerificationToken {
 
 model User {
   id            String         @id @default(cuid())
+  uid           String?        @unique
   email         String?        @unique
   name          String?
   image         String?
