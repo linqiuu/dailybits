@@ -1,6 +1,7 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn, getProviders, type ClientSafeProvider } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -12,7 +13,29 @@ function GithubIcon() {
   );
 }
 
+function IntranetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10v4M10 10v4M14 10v4M18 10v4M2 12h20" />
+    </svg>
+  );
+}
+
+const PROVIDER_META: Record<string, { icon: React.ReactNode; label: string }> = {
+  github: { icon: <GithubIcon />, label: "使用 GitHub 登录" },
+  "company-sso": { icon: <IntranetIcon />, label: "内网账号登录" },
+};
+
 export default function LoginPage() {
+  const [providers, setProviders] = useState<Record<string, ClientSafeProvider> | null>(null);
+
+  useEffect(() => {
+    getProviders().then(setProviders);
+  }, []);
+
+  const providerList = providers ? Object.values(providers) : [];
+
   return (
     <div className="page-enter flex min-h-[60vh] items-center justify-center">
       <Card className="w-full max-w-sm border-border/60 bg-card/80 shadow-lg shadow-primary/5">
@@ -26,14 +49,26 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="divider-literary text-xs">选择登录方式</div>
-          <Button
-            variant="outline"
-            className="w-full gap-2 border-border hover:bg-secondary"
-            onClick={() => signIn("github", { callbackUrl: "/" })}
-          >
-            <GithubIcon />
-            使用 GitHub 登录
-          </Button>
+          {providerList.length === 0 ? (
+            <div className="flex justify-center py-4">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : (
+            providerList.map((provider) => {
+              const meta = PROVIDER_META[provider.id];
+              return (
+                <Button
+                  key={provider.id}
+                  variant="outline"
+                  className="w-full gap-2 border-border hover:bg-secondary"
+                  onClick={() => signIn(provider.id, { callbackUrl: "/" })}
+                >
+                  {meta?.icon}
+                  {meta?.label ?? `使用 ${provider.name} 登录`}
+                </Button>
+              );
+            })
+          )}
         </CardContent>
       </Card>
     </div>

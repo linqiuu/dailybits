@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -34,31 +34,42 @@ export function BankExplorer() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      setLoading(true);
-      setDebouncedSearch(search);
-    }, 300);
+    if (search === debouncedSearch) return;
+    setLoading(true);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, debouncedSearch]);
 
-  useEffect(() => {
+  const fetchBanks = useCallback(() => {
+    const id = ++fetchIdRef.current;
+    setLoading(true);
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("search", debouncedSearch);
     params.set("page", String(page));
     fetch(`/api/banks?${params}`)
       .then((res) => res.json())
       .then((json: ApiResponse | { error: string }) => {
+        if (id !== fetchIdRef.current) return;
         if ("error" in json) {
           setData(null);
         } else {
           setData(json);
         }
       })
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (id === fetchIdRef.current) setData(null);
+      })
+      .finally(() => {
+        if (id === fetchIdRef.current) setLoading(false);
+      });
   }, [debouncedSearch, page]);
+
+  useEffect(() => {
+    fetchBanks();
+  }, [fetchBanks]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
@@ -105,10 +116,7 @@ export function BankExplorer() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setLoading(true);
-                  setPage((p) => Math.max(1, p - 1));
-                }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
               >
                 上一页
@@ -119,10 +127,7 @@ export function BankExplorer() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setLoading(true);
-                  setPage((p) => Math.min(data.totalPages, p + 1));
-                }}
+                onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
                 disabled={page >= data.totalPages}
               >
                 下一页
