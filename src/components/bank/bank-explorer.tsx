@@ -26,6 +26,7 @@ interface ApiResponse {
   page: number;
   totalPages: number;
   isLoggedIn?: boolean;
+  subscriptionCount?: number;
 }
 
 export function BankExplorer() {
@@ -105,6 +106,7 @@ export function BankExplorer() {
                   subscriberCount={bank.subscriberCount}
                   isLoggedIn={data?.isLoggedIn}
                   isSubscribed={bank.isSubscribed}
+                  subscriptionCount={data?.subscriptionCount ?? 0}
                   appearDelayMs={index * 70}
                 />
               </div>

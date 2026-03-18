@@ -34,8 +34,9 @@ export async function GET(
     if (session?.user?.id) {
       subscription = await prisma.subscription.findUnique({
         where: {
-          userId_bankId: {
-            userId: session.user.id,
+          targetType_targetId_bankId: {
+            targetType: "USER",
+            targetId: session.user.id,
             bankId: id,
           },
         },

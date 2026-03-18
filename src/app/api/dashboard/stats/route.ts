@@ -10,7 +10,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const targetType = "USER" as const;
+    const targetId = session.user.id;
     const now = new Date();
     const startOfToday = new Date(
       now.getFullYear(),
@@ -34,24 +35,25 @@ export async function GET() {
       createdBanksCount,
     ] = await Promise.all([
       prisma.subscription.count({
-        where: { userId, isActive: true },
+        where: { targetType, targetId, isActive: true },
       }),
       prisma.pushLog.count({
         where: {
-          userId,
+          targetType,
+          targetId,
           pushedAt: { gte: startOfToday, lte: endOfToday },
         },
       }),
       prisma.subscription
         .findMany({
-          where: { userId, isActive: true },
+          where: { targetType, targetId, isActive: true },
           select: { pushTimes: true },
         })
         .then((subs) =>
           subs.reduce((sum, s) => sum + s.pushTimes.length, 0)
         ),
       prisma.questionBank.count({
-        where: { creatorId: userId },
+        where: { creatorId: targetId },
       }),
     ]);
 

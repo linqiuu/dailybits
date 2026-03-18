@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
 
 interface SubscriptionPanelProps {
   bankId: string;
@@ -43,6 +44,8 @@ export function SubscriptionPanel({
 
   if (!subscription) return null;
 
+  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
+
   const addTime = () => {
     const val = newTime.trim();
     if (!val || !/^\d{2}:\d{2}$/.test(val)) {
@@ -51,6 +54,10 @@ export function SubscriptionPanel({
     }
     if (pushTimes.includes(val)) {
       toast.error("该时间已存在");
+      return;
+    }
+    if (atTimeLimit) {
+      toast.error(`推送时间不能超过 ${MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个`);
       return;
     }
     setPushTimes((prev) => [...prev, val].sort());
@@ -151,10 +158,16 @@ export function SubscriptionPanel({
                     variant="secondary"
                     size="sm"
                     onClick={addTime}
+                    disabled={atTimeLimit}
                   >
                     添加
                   </Button>
                 </div>
+                {atTimeLimit && (
+                  <p className="text-xs text-amber-600">
+                    已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {pushTimes.map((t) => (
                     <Badge

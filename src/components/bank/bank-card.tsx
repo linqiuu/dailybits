@@ -16,6 +16,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+  MAX_SUBSCRIPTIONS_PER_TARGET,
+  MAX_PUSH_TIMES_PER_SUBSCRIPTION,
+  DEFAULT_PUSH_TIMES,
+} from "@/types";
 
 export interface BankCardProps {
   id: string;
@@ -25,6 +30,7 @@ export interface BankCardProps {
   subscriberCount: number;
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
+  subscriptionCount?: number;
   appearDelayMs?: number;
 }
 
@@ -36,18 +42,23 @@ export function BankCard({
   subscriberCount,
   isLoggedIn = false,
   isSubscribed = false,
+  subscriptionCount = 0,
   appearDelayMs = 0,
 }: BankCardProps) {
   const [subscribed, setSubscribed] = useState(isSubscribed);
   const [subCount, setSubCount] = useState(subscriberCount);
   const [open, setOpen] = useState(false);
-  const [pushTimes, setPushTimes] = useState<string[]>([]);
+  const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
   const [newTime, setNewTime] = useState("08:00");
   const [loading, setLoading] = useState(false);
+
+  const atSubLimit = subscriptionCount >= MAX_SUBSCRIPTIONS_PER_TARGET;
+  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
 
   const addTime = () => {
     const val = newTime.trim();
     if (!val || pushTimes.includes(val)) return;
+    if (atTimeLimit) return;
     setPushTimes((prev) => [...prev, val].sort());
   };
 
@@ -112,59 +123,78 @@ export function BankCard({
             查看详情
           </Button>
           {isLoggedIn && !subscribed && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
-                订阅
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="font-serif">订阅「{title}」</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>选择每日推送时间</Label>
-                    <p className="text-xs text-muted-foreground">
-                      默认仅工作日推送（自动跳过周末与法定节假日）
-                    </p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="time"
-                        value={newTime}
-                        onChange={(e) => setNewTime(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button type="button" variant="secondary" size="sm" onClick={addTime}>
-                        添加
+            <>
+              {atSubLimit ? (
+                <Badge variant="secondary" className="text-xs text-muted-foreground">
+                  订阅数已满 {MAX_SUBSCRIPTIONS_PER_TARGET}/{MAX_SUBSCRIPTIONS_PER_TARGET}
+                </Badge>
+              ) : (
+                <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
+                    订阅
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="font-serif">订阅「{title}」</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>选择每日推送时间</Label>
+                        <p className="text-xs text-muted-foreground">
+                          默认仅工作日推送（自动跳过周末与法定节假日），最多 {MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个时间点
+                        </p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="time"
+                            value={newTime}
+                            onChange={(e) => setNewTime(e.target.value)}
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={addTime}
+                            disabled={atTimeLimit}
+                          >
+                            添加
+                          </Button>
+                        </div>
+                        {atTimeLimit && (
+                          <p className="text-xs text-amber-600">
+                            已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
+                          </p>
+                        )}
+                      </div>
+                      {pushTimes.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {pushTimes.map((t) => (
+                            <Badge
+                              key={t}
+                              className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
+                              onClick={() => removeTime(t)}
+                            >
+                              {t} ×
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      {pushTimes.length === 0 && (
+                        <p className="text-xs text-muted-foreground">点击「添加」设定推送时间，支持多个时间点</p>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+                        取消
                       </Button>
-                    </div>
-                  </div>
-                  {pushTimes.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {pushTimes.map((t) => (
-                        <Badge
-                          key={t}
-                          className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
-                          onClick={() => removeTime(t)}
-                        >
-                          {t} ×
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {pushTimes.length === 0 && (
-                    <p className="text-xs text-muted-foreground">点击「添加」设定推送时间，支持多个时间点</p>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
-                    取消
-                  </Button>
-                  <Button onClick={handleSubscribe} disabled={loading}>
-                    {loading ? "订阅中..." : "确认订阅"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                      <Button onClick={handleSubscribe} disabled={loading}>
+                        {loading ? "订阅中..." : "确认订阅"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </>
           )}
           {subscribed && (
             <Badge className="bg-success/10 text-success border-0">已订阅</Badge>

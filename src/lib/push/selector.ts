@@ -1,11 +1,16 @@
 import { prisma } from "@/lib/prisma";
+import type { TargetType } from "@/types";
 
-export async function selectQuestion(userId: string, bankId: string) {
+export async function selectQuestion(
+  targetType: TargetType,
+  targetId: string,
+  bankId: string,
+) {
   const unpushed = await prisma.question.findFirst({
     where: {
       bankId,
       status: "PUBLISHED",
-      pushLogs: { none: { userId } },
+      pushLogs: { none: { targetType, targetId } },
     },
     orderBy: { createdAt: "desc" },
   });

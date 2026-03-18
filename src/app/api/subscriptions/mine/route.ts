@@ -10,9 +10,13 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const targetType = "USER" as const;
+    const targetId = session.user.id;
+
     const subscriptions = await prisma.subscription.findMany({
       where: {
-        userId: session.user.id,
+        targetType,
+        targetId,
         isActive: true,
       },
       include: {
@@ -29,7 +33,8 @@ export async function GET() {
     const bankIds = subscriptions.map((s) => s.bankId);
     const pushedWithBank = await prisma.pushLog.findMany({
       where: {
-        userId: session.user.id,
+        targetType,
+        targetId,
         question: { bankId: { in: bankIds } },
       },
       select: {

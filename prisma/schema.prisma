@@ -51,8 +51,6 @@ model User {
   accounts      Account[]
   sessions      Session[]
   banks         QuestionBank[]
-  subscriptions Subscription[]
-  pushLogs      PushLog[]
 }
 
 model QuestionBank {
@@ -66,6 +64,11 @@ model QuestionBank {
   creator         User           @relation(fields: [creatorId], references: [id])
   questions       Question[]
   subscriptions   Subscription[]
+}
+
+enum TargetType {
+  USER
+  GROUP
 }
 
 enum QuestionStatus {
@@ -95,26 +98,27 @@ model Question {
 }
 
 model Subscription {
-  id        String       @id @default(cuid())
-  userId    String
-  bankId    String
-  pushTimes String[]
-  isActive  Boolean      @default(true)
-  createdAt DateTime     @default(now())
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bank      QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  id         String       @id @default(cuid())
+  targetType TargetType   @default(USER)
+  targetId   String
+  bankId     String
+  pushTimes  String[]     @default(["09:30", "14:00", "17:00"])
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  bank       QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, bankId])
+  @@unique([targetType, targetId, bankId])
+  @@index([targetType, targetId])
 }
 
 model PushLog {
-  id         String   @id @default(cuid())
-  userId     String
+  id         String     @id @default(cuid())
+  targetType TargetType @default(USER)
+  targetId   String
   questionId String
-  pushedAt   DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  pushedAt   DateTime   @default(now())
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
-  @@index([userId, questionId])
-  @@index([userId])
+  @@index([targetType, targetId, questionId])
+  @@index([targetType, targetId])
 }

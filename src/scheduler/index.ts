@@ -2,12 +2,14 @@ import "dotenv/config";
 import cron from "node-cron";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
+import type { TargetType } from "../generated/prisma/client.js";
 import Holidays from "date-holidays";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 const holidayCalendar = new Holidays(process.env.HOLIDAY_COUNTRY ?? "CN");
 const skipNonWorkingDays = process.env.SKIP_NON_WORKING_DAYS !== "false";
+const schedulerTZ = process.env.SCHEDULER_TIMEZONE ?? "Asia/Shanghai";
 
 interface PushPayload {
   receiver: string;
@@ -20,7 +22,13 @@ interface PushPayload {
 
 function getCurrentTimeHHMM(): string {
   const now = new Date();
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const formatted = now.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: schedulerTZ,
+    hour12: false,
+  });
+  return formatted;
 }
 
 function shouldSkipPushToday(date: Date): {
@@ -32,29 +40,37 @@ function shouldSkipPushToday(date: Date): {
     return { skip: false };
   }
 
-  const day = date.getDay();
-  if (day === 0 || day === 6) {
+  const dayStr = date.toLocaleDateString("en-US", {
+    weekday: "short",
+    timeZone: schedulerTZ,
+  });
+  if (dayStr === "Sat" || dayStr === "Sun") {
     return { skip: true, reason: "weekend" };
   }
 
   const holiday = holidayCalendar.isHoliday(date);
   if (holiday) {
+    const holidays = Array.isArray(holiday) ? holiday : [holiday];
     return {
       skip: true,
       reason: "holiday",
-      holidayName: Array.isArray(holiday) ? holiday[0]?.name : holiday.name,
+      holidayName: (holidays[0] as { name?: string })?.name ?? "Unknown holiday",
     };
   }
 
   return { skip: false };
 }
 
-async function selectQuestion(userId: string, bankId: string) {
+async function selectQuestion(
+  targetType: TargetType,
+  targetId: string,
+  bankId: string,
+) {
   const unpushed = await prisma.question.findFirst({
     where: {
       bankId,
       status: "PUBLISHED",
-      pushLogs: { none: { userId } },
+      pushLogs: { none: { targetType, targetId } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -72,7 +88,21 @@ async function selectQuestion(userId: string, bankId: string) {
   });
 }
 
-async function pushToTarget(payload: PushPayload): Promise<boolean> {
+async function resolveReceiver(
+  targetType: TargetType,
+  targetId: string,
+): Promise<string> {
+  if (targetType === "GROUP") {
+    return targetId;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: targetId },
+    select: { uid: true },
+  });
+  return user?.uid ?? targetId;
+}
+
+async function pushToEndpoint(payload: PushPayload): Promise<boolean> {
   const url = process.env.PUSH_API_URL;
   if (!url) {
     console.log("[PUSH MOCK]", JSON.stringify(payload, null, 2));
@@ -108,15 +138,15 @@ cron.schedule("* * * * *", async () => {
       isActive: true,
       pushTimes: { has: currentTime },
     },
-    include: { user: true, bank: true },
+    include: { bank: true },
   });
 
   for (const sub of matchedSubs) {
     try {
-      const question = await selectQuestion(sub.userId, sub.bankId);
+      const question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
       if (!question) continue;
 
-      const receiver = sub.user.uid ?? sub.userId;
+      const receiver = await resolveReceiver(sub.targetType, sub.targetId);
       const payload = {
         receiver,
         title: sub.bank.title,
@@ -126,12 +156,18 @@ cron.schedule("* * * * *", async () => {
         explanation: question.explanation,
       };
 
-      const success = await pushToTarget(payload);
+      const success = await pushToEndpoint(payload);
       if (success) {
         await prisma.pushLog.create({
-          data: { userId: sub.userId, questionId: question.id },
+          data: {
+            targetType: sub.targetType,
+            targetId: sub.targetId,
+            questionId: question.id,
+          },
         });
-        console.log(`[Scheduler] Pushed to ${sub.user.name || sub.userId}`);
+        console.log(
+          `[Scheduler] Pushed to ${sub.targetType}:${sub.targetId}`
+        );
       }
     } catch (err) {
       console.error(`[Scheduler] Error for subscription ${sub.id}:`, err);

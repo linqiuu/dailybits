@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
@@ -8,43 +6,88 @@ import {
   DEFAULT_PUSH_TIMES,
 } from "@/types";
 
-export async function POST(request: NextRequest) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ groupId: string }> }
+) {
   try {
+    const { groupId } = await context.params;
+
+    const subscriptions = await prisma.subscription.findMany({
+      where: {
+        targetType: "GROUP",
+        targetId: groupId,
+        isActive: true,
+      },
+      include: {
+        bank: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            subscriberCount: true,
+            _count: { select: { questions: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const bankIds = subscriptions.map((s) => s.bankId);
+    const pushedLogs = await prisma.pushLog.findMany({
+      where: {
+        targetType: "GROUP",
+        targetId: groupId,
+        question: { bankId: { in: bankIds } },
+      },
+      select: {
+        questionId: true,
+        question: { select: { bankId: true } },
+      },
+      distinct: ["questionId"],
+    });
+
+    const pushedCountByBank = new Map<string, number>();
+    for (const p of pushedLogs) {
+      const bid = p.question.bankId;
+      pushedCountByBank.set(bid, (pushedCountByBank.get(bid) ?? 0) + 1);
+    }
+
+    const result = subscriptions.map((sub) => ({
+      id: sub.id,
+      bankId: sub.bankId,
+      pushTimes: sub.pushTimes,
+      isActive: sub.isActive,
+      bank: sub.bank,
+      questionCount: sub.bank._count.questions,
+      pushedCount: pushedCountByBank.get(sub.bankId) ?? 0,
+    }));
+
+    return NextResponse.json({
+      subscriptions: result,
+      count: result.length,
+      limit: MAX_SUBSCRIPTIONS_PER_TARGET,
+    });
+  } catch (error) {
+    console.error("[GET /api/group/[groupId]/subscriptions]", error);
+    return NextResponse.json(
+      { error: "Failed to fetch group subscriptions" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ groupId: string }> }
+) {
+  try {
+    const { groupId } = await context.params;
     const body = await request.json();
-    const {
-      bankId,
-      pushTimes,
-      targetType = "USER",
-      targetId: rawTargetId,
-    } = body as {
+    const { bankId, pushTimes } = body as {
       bankId?: string;
       pushTimes?: string[];
-      targetType?: "USER" | "GROUP";
-      targetId?: string;
     };
-
-    let targetId: string;
-
-    if (targetType === "USER") {
-      const session = await getServerSession(authOptions);
-      if (!session?.user?.id) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-      targetId = session.user.id;
-    } else if (targetType === "GROUP") {
-      if (!rawTargetId || typeof rawTargetId !== "string" || rawTargetId.trim() === "") {
-        return NextResponse.json(
-          { error: "targetId is required for GROUP subscriptions" },
-          { status: 400 }
-        );
-      }
-      targetId = rawTargetId.trim();
-    } else {
-      return NextResponse.json(
-        { error: "targetType must be USER or GROUP" },
-        { status: 400 }
-      );
-    }
 
     if (!bankId || typeof bankId !== "string" || bankId.trim() === "") {
       return NextResponse.json(
@@ -66,7 +109,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
     if (validTimes.length > MAX_PUSH_TIMES_PER_SUBSCRIPTION) {
       return NextResponse.json(
         { error: `pushTimes cannot exceed ${MAX_PUSH_TIMES_PER_SUBSCRIPTION}` },
@@ -84,8 +126,8 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.subscription.findUnique({
       where: {
         targetType_targetId_bankId: {
-          targetType,
-          targetId,
+          targetType: "GROUP",
+          targetId: groupId,
           bankId: bank.id,
         },
       },
@@ -98,7 +140,7 @@ export async function POST(request: NextRequest) {
     }
 
     const currentCount = await prisma.subscription.count({
-      where: { targetType, targetId, isActive: true },
+      where: { targetType: "GROUP", targetId: groupId, isActive: true },
     });
     if (currentCount >= MAX_SUBSCRIPTIONS_PER_TARGET) {
       return NextResponse.json(
@@ -110,15 +152,13 @@ export async function POST(request: NextRequest) {
     const [subscription] = await prisma.$transaction([
       prisma.subscription.create({
         data: {
-          targetType,
-          targetId,
+          targetType: "GROUP",
+          targetId: groupId,
           bankId: bank.id,
           pushTimes: validTimes,
         },
         include: {
-          bank: {
-            select: { id: true, title: true },
-          },
+          bank: { select: { id: true, title: true } },
         },
       }),
       prisma.questionBank.update({
@@ -129,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(subscription);
   } catch (error) {
-    console.error("[POST /api/subscriptions]", error);
+    console.error("[POST /api/group/[groupId]/subscriptions]", error);
     return NextResponse.json(
       { error: "Failed to subscribe" },
       { status: 500 }

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const [logs, total] = await Promise.all([
       prisma.pushLog.findMany({
-        where: { userId: session.user.id },
+        where: { targetType: "USER", targetId: session.user.id },
         orderBy: { pushedAt: "desc" },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.pushLog.count({
-        where: { userId: session.user.id },
+        where: { targetType: "USER", targetId: session.user.id },
       }),
     ]);
 

@@ -11,18 +11,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { userId, bankId } = body as { userId?: string; bankId?: string };
+    const { targetType = "USER", targetId, bankId } = body as {
+      targetType?: "USER" | "GROUP";
+      targetId?: string;
+      bankId?: string;
+    };
 
     let subscription;
-    if (userId && bankId) {
+    if (targetId && bankId) {
       subscription = await prisma.subscription.findUnique({
-        where: { userId_bankId: { userId, bankId } },
-        include: { user: true, bank: true },
+        where: {
+          targetType_targetId_bankId: { targetType, targetId, bankId },
+        },
+        include: { bank: true },
       });
     } else {
       subscription = await prisma.subscription.findFirst({
         where: { isActive: true },
-        include: { user: true, bank: true },
+        include: { bank: true },
       });
     }
 
@@ -33,7 +39,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const question = await selectQuestion(subscription.userId, subscription.bankId);
+    const question = await selectQuestion(
+      subscription.targetType as "USER" | "GROUP",
+      subscription.targetId,
+      subscription.bankId,
+    );
     if (!question) {
       return NextResponse.json(
         { error: "No question available to push" },
@@ -41,17 +51,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const receiver = subscription.user.uid ?? subscription.userId;
+    let receiver = subscription.targetId;
+    if (subscription.targetType === "USER") {
+      const user = await prisma.user.findUnique({
+        where: { id: subscription.targetId },
+        select: { uid: true, name: true },
+      });
+      receiver = user?.uid ?? subscription.targetId;
+    }
+
     const payload = buildPayload(receiver, subscription.bank.title, question);
     const success = await pushToTarget(payload);
 
     if (success) {
       await prisma.pushLog.create({
-        data: { userId: subscription.userId, questionId: question.id },
+        data: {
+          targetType: subscription.targetType,
+          targetId: subscription.targetId,
+          questionId: question.id,
+        },
       });
       return NextResponse.json({
         success: true,
-        message: `Pushed to ${subscription.user.name || subscription.userId}`,
+        message: `Pushed to ${subscription.targetType}:${subscription.targetId}`,
       });
     }
 

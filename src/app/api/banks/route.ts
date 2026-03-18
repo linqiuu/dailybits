@@ -22,6 +22,10 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
+    const { searchParams: sp } = new URL(request.url);
+    const targetType = (sp.get("targetType") ?? "USER") as "USER" | "GROUP";
+    const targetIdParam = sp.get("targetId");
+
     const session = await getServerSession(authOptions);
 
     const [banks, total] = await Promise.all([
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
             select: { questions: true },
           },
         },
-        orderBy: { updatedAt: "desc" },
+        orderBy: { subscriberCount: "desc" },
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
       }),
@@ -43,13 +47,31 @@ export async function GET(request: NextRequest) {
     ]);
 
     let subscribedBankIds: Set<string> = new Set();
-    if (session?.user?.id) {
+    const resolvedTargetId = targetType === "GROUP" && targetIdParam
+      ? targetIdParam
+      : session?.user?.id ?? null;
+
+    if (resolvedTargetId) {
       const subs = await prisma.subscription.findMany({
-        where: { userId: session.user.id, isActive: true },
+        where: {
+          targetType: targetType === "GROUP" && targetIdParam ? "GROUP" : "USER",
+          targetId: resolvedTargetId,
+          isActive: true,
+        },
         select: { bankId: true },
       });
       subscribedBankIds = new Set(subs.map((s) => s.bankId));
     }
+
+    const subscriptionCount = resolvedTargetId
+      ? await prisma.subscription.count({
+          where: {
+            targetType: targetType === "GROUP" && targetIdParam ? "GROUP" : "USER",
+            targetId: resolvedTargetId,
+            isActive: true,
+          },
+        })
+      : 0;
 
     const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -62,6 +84,7 @@ export async function GET(request: NextRequest) {
       page,
       totalPages,
       isLoggedIn: !!session?.user?.id,
+      subscriptionCount,
     });
   } catch (error) {
     console.error("[GET /api/banks]", error);

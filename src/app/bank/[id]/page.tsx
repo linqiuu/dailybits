@@ -45,15 +45,17 @@ export default async function BankDetailPage({ params }: PageProps) {
     const [sub, pushed] = await Promise.all([
       prisma.subscription.findUnique({
         where: {
-          userId_bankId: {
-            userId: session.user.id,
+          targetType_targetId_bankId: {
+            targetType: "USER",
+            targetId: session.user.id,
             bankId: id,
           },
         },
       }),
       prisma.pushLog.findMany({
         where: {
-          userId: session.user.id,
+          targetType: "USER",
+          targetId: session.user.id,
           question: { bankId: id },
         },
         select: { questionId: true },
