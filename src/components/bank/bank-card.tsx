@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
@@ -25,7 +32,7 @@ import {
 export interface BankCardProps {
   id: string;
   title: string;
-  creator: { id: string; name: string | null; image: string | null };
+  creator: { id: string; name: string | null; image: string | null; uid?: string | null };
   questionCount: number;
   subscriberCount: number;
   isLoggedIn?: boolean;
@@ -51,6 +58,10 @@ export function BankCard({
   const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
   const [newTime, setNewTime] = useState("08:00");
   const [loading, setLoading] = useState(false);
+  const [endCondition, setEndCondition] = useState<"END_AFTER_COMPLETE" | "REPEAT_N_TIMES">(
+    "END_AFTER_COMPLETE"
+  );
+  const [repeatCount, setRepeatCount] = useState(1);
 
   const atSubLimit = subscriptionCount >= MAX_SUBSCRIPTIONS_PER_TARGET;
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
@@ -71,12 +82,21 @@ export function BankCard({
       toast.error("请至少添加一个推送时间");
       return;
     }
+    if (endCondition === "REPEAT_N_TIMES" && (!Number.isFinite(repeatCount) || repeatCount < 1)) {
+      toast.error("循环次数须为大于 0 的整数");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankId: id, pushTimes }),
+        body: JSON.stringify({
+          bankId: id,
+          pushTimes,
+          endCondition,
+          repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -108,9 +128,10 @@ export function BankCard({
         <div className="space-y-1">
           <p className="text-sm text-muted-foreground">
             创建者：{creator.name ?? "未知"}
+            {creator.uid ? ` (${creator.uid})` : ""}
           </p>
           <p className="text-sm text-muted-foreground">
-            {questionCount} 题 · {subCount} 人订阅
+            {questionCount} 题 · {subCount} 人订阅过
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -138,6 +159,38 @@ export function BankCard({
                       <DialogTitle className="font-serif">订阅「{title}」</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>结束条件</Label>
+                        <Select
+                          value={endCondition}
+                          onValueChange={(v) =>
+                            setEndCondition(v as "END_AFTER_COMPLETE" | "REPEAT_N_TIMES")
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="END_AFTER_COMPLETE">推送完结束</SelectItem>
+                            <SelectItem value="REPEAT_N_TIMES">循环推送</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {endCondition === "REPEAT_N_TIMES" && (
+                          <div className="space-y-1.5 pt-1">
+                            <Label htmlFor={`repeat-${id}`}>循环次数</Label>
+                            <Input
+                              id={`repeat-${id}`}
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={repeatCount}
+                              onChange={(e) =>
+                                setRepeatCount(Math.max(1, Number.parseInt(e.target.value, 10) || 1))
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <Label>选择每日推送时间</Label>
                         <p className="text-xs text-muted-foreground">

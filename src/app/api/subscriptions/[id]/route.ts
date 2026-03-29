@@ -4,6 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
 
+const END_CONDITIONS = ["END_AFTER_COMPLETE", "REPEAT_N_TIMES"] as const;
+type EndConditionValue = (typeof END_CONDITIONS)[number];
+
 async function authorizeSubscription(subscriptionId: string, request: NextRequest) {
   const subscription = await prisma.subscription.findUnique({
     where: { id: subscriptionId },
@@ -43,36 +46,103 @@ export async function PATCH(
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
+    const sub = auth.subscription!;
     const body = await request.json();
-    const { pushTimes } = body as { pushTimes?: string[] };
+    const { pushTimes, endCondition, repeatCount } = body as {
+      pushTimes?: string[];
+      endCondition?: unknown;
+      repeatCount?: unknown;
+    };
 
-    if (!Array.isArray(pushTimes) || pushTimes.length === 0) {
+    const data: {
+      pushTimes?: string[];
+      endCondition?: EndConditionValue;
+      repeatCount?: number;
+    } = {};
+
+    const hasPush = pushTimes !== undefined;
+    const hasEnd =
+      endCondition !== undefined || repeatCount !== undefined;
+
+    if (!hasPush && !hasEnd) {
       return NextResponse.json(
-        { error: "pushTimes must be a non-empty array" },
+        {
+          error:
+            "Provide pushTimes and/or endCondition and/or repeatCount to update",
+        },
         { status: 400 }
       );
     }
 
-    const validTimes = pushTimes.filter(
-      (t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t)
-    );
-    if (validTimes.length === 0) {
-      return NextResponse.json(
-        { error: "pushTimes must contain valid HH:MM format strings" },
-        { status: 400 }
+    if (hasPush) {
+      if (!Array.isArray(pushTimes) || pushTimes.length === 0) {
+        return NextResponse.json(
+          { error: "pushTimes must be a non-empty array" },
+          { status: 400 }
+        );
+      }
+
+      const validTimes = pushTimes.filter(
+        (t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t)
       );
+      if (validTimes.length === 0) {
+        return NextResponse.json(
+          { error: "pushTimes must contain valid HH:MM format strings" },
+          { status: 400 }
+        );
+      }
+
+      if (validTimes.length > MAX_PUSH_TIMES_PER_SUBSCRIPTION) {
+        return NextResponse.json(
+          { error: `pushTimes cannot exceed ${MAX_PUSH_TIMES_PER_SUBSCRIPTION}` },
+          { status: 400 }
+        );
+      }
+      data.pushTimes = validTimes;
     }
 
-    if (validTimes.length > MAX_PUSH_TIMES_PER_SUBSCRIPTION) {
+    let nextEndCondition = sub.endCondition as EndConditionValue;
+    let nextRepeatCount = sub.repeatCount;
+
+    if (endCondition !== undefined) {
+      if (
+        typeof endCondition !== "string" ||
+        !END_CONDITIONS.includes(endCondition as EndConditionValue)
+      ) {
+        return NextResponse.json(
+          { error: "endCondition must be END_AFTER_COMPLETE or REPEAT_N_TIMES" },
+          { status: 400 }
+        );
+      }
+      nextEndCondition = endCondition as EndConditionValue;
+      data.endCondition = nextEndCondition;
+    }
+
+    if (repeatCount !== undefined) {
+      if (
+        typeof repeatCount !== "number" ||
+        !Number.isInteger(repeatCount) ||
+        repeatCount < 0
+      ) {
+        return NextResponse.json(
+          { error: "repeatCount must be a non-negative integer" },
+          { status: 400 }
+        );
+      }
+      nextRepeatCount = repeatCount;
+      data.repeatCount = nextRepeatCount;
+    }
+
+    if (nextEndCondition === "REPEAT_N_TIMES" && nextRepeatCount <= 0) {
       return NextResponse.json(
-        { error: `pushTimes cannot exceed ${MAX_PUSH_TIMES_PER_SUBSCRIPTION}` },
+        { error: "repeatCount must be greater than 0 when endCondition is REPEAT_N_TIMES" },
         { status: 400 }
       );
     }
 
     const updated = await prisma.subscription.update({
       where: { id },
-      data: { pushTimes: validTimes },
+      data,
       include: {
         bank: {
           select: { id: true, title: true },
@@ -101,17 +171,9 @@ export async function DELETE(
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    const subscription = auth.subscription!;
-
-    await prisma.$transaction([
-      prisma.subscription.delete({
-        where: { id },
-      }),
-      prisma.questionBank.update({
-        where: { id: subscription.bankId },
-        data: { subscriberCount: { decrement: 1 } },
-      }),
-    ]);
+    await prisma.subscription.delete({
+      where: { id },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

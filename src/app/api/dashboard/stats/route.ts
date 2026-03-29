@@ -35,7 +35,7 @@ export async function GET() {
       createdBanksCount,
     ] = await Promise.all([
       prisma.subscription.count({
-        where: { targetType, targetId, isActive: true },
+        where: { targetType, targetId },
       }),
       prisma.pushLog.count({
         where: {

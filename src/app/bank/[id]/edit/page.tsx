@@ -19,8 +19,160 @@ import {
 } from "@/components/ui/select";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { FileJson2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const ACCEPT_EXCEL = ".xlsx,.csv";
+
+type BankVisibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
+
+const VISIBILITY_LABELS: Record<BankVisibility, string> = {
+  PRIVATE: "仅自己可见",
+  PUBLIC: "公开",
+  PARTIAL: "部分可见",
+};
+
+const JSON_IMPORT_EXAMPLE = `[
+  {
+    "content": "题目内容",
+    "options": { "A": "选项A", "B": "选项B", "C": "选项C", "D": "选项D" },
+    "correctAnswer": "A",
+    "explanation": "解析内容"
+  }
+]`;
+
+function validateImportQuestion(
+  item: unknown,
+  indexLabel: string
+): { ok: true; data: Record<string, unknown> } | { ok: false; error: string } {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    return { ok: false, error: `${indexLabel} 必须是对象` };
+  }
+  const o = item as Record<string, unknown>;
+  const { content, options, correctAnswer, explanation } = o;
+  if (typeof content !== "string" || !content.trim()) {
+    return { ok: false, error: `${indexLabel}：缺少或无效的 content` };
+  }
+  if (options === undefined || options === null) {
+    return { ok: false, error: `${indexLabel}：缺少 options` };
+  }
+  if (typeof options !== "object" || Array.isArray(options)) {
+    return { ok: false, error: `${indexLabel}：options 必须是对象` };
+  }
+  if (typeof correctAnswer !== "string" || !correctAnswer.trim()) {
+    return { ok: false, error: `${indexLabel}：缺少或无效的 correctAnswer` };
+  }
+  if (typeof explanation !== "string") {
+    return { ok: false, error: `${indexLabel}：explanation 必须是字符串` };
+  }
+  return {
+    ok: true,
+    data: {
+      content: content.trim(),
+      options,
+      correctAnswer: correctAnswer.trim(),
+      explanation: explanation.trim(),
+    },
+  };
+}
+
+function JsonImportPanel({
+  bankId,
+  onSuccess,
+}: {
+  bankId: string;
+  onSuccess?: () => void;
+}) {
+  const [raw, setRaw] = React.useState("");
+  const [showExample, setShowExample] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  const handleImport = async () => {
+    const text = raw.trim();
+    if (!text) {
+      toast.error("请粘贴 JSON");
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      toast.error("JSON 格式无效");
+      return;
+    }
+    const items: unknown[] = Array.isArray(parsed)
+      ? parsed
+      : [parsed];
+    const validated: Record<string, unknown>[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const result = validateImportQuestion(items[i], `第 ${i + 1} 项`);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      validated.push(result.data);
+    }
+    if (validated.length === 0) {
+      toast.error("没有可导入的题目");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/banks/${bankId}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(validated),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "导入失败");
+      }
+      const count = typeof data.count === "number" ? data.count : validated.length;
+      toast.success(`成功导入 ${count} 道题目`);
+      setRaw("");
+      onSuccess?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "导入失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4 font-serif">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowExample((v) => !v)}
+        >
+          {showExample ? "隐藏样例" : "查看样例"}
+        </Button>
+      </div>
+      {showExample && (
+        <pre className="max-h-48 overflow-auto rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
+          {JSON_IMPORT_EXAMPLE}
+        </pre>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="json-import-textarea">粘贴题目 JSON（单题对象或数组）</Label>
+        <Textarea
+          id="json-import-textarea"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          placeholder="粘贴 JSON…"
+          className="min-h-[220px] resize-y font-mono text-sm"
+          disabled={loading}
+        />
+      </div>
+      <Button onClick={handleImport} disabled={loading}>
+        <FileJson2 className="mr-2 size-4" />
+        {loading ? "导入中…" : "导入"}
+      </Button>
+    </div>
+  );
+}
 
 function FileUploadPanel({
   bankId,
@@ -32,6 +184,7 @@ function FileUploadPanel({
   const [file, setFile] = React.useState<File | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [dragOver, setDragOver] = React.useState(false);
+  const [generatedCount, setGeneratedCount] = React.useState<number | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -78,10 +231,11 @@ function FileUploadPanel({
       if (!res.ok) {
         throw new Error(data.error ?? "上传失败");
       }
-      toast.success(`已成功导入 ${data.count ?? 0} 道题目`);
+      const n = data.count ?? 0;
+      toast.success(`已生成 ${n} 道题目（草稿状态）`);
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
-      onSuccess?.();
+      setGeneratedCount(n);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "上传失败");
     } finally {
@@ -89,8 +243,23 @@ function FileUploadPanel({
     }
   };
 
+  const handleGoPreview = () => {
+    setGeneratedCount(null);
+    onSuccess?.();
+  };
+
   return (
     <div className="space-y-6 font-serif">
+      {generatedCount !== null && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="text-foreground">
+            已生成 {generatedCount} 道题目（草稿状态），请在「题目管理」中预览和发布。
+          </p>
+          <Button type="button" className="mt-3" size="sm" onClick={handleGoPreview}>
+            前往预览
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3">
         <p className="text-sm text-muted-foreground">
           先下载模板填写题目，再上传导入，格式更稳定。
@@ -144,6 +313,7 @@ function UrlParsePanel({
   const [url, setUrl] = React.useState("");
   const [count, setCount] = React.useState(10);
   const [loading, setLoading] = React.useState(false);
+  const [generatedCount, setGeneratedCount] = React.useState<number | null>(null);
 
   const handleGenerate = async () => {
     if (!url.trim()) {
@@ -161,9 +331,10 @@ function UrlParsePanel({
       if (!res.ok) {
         throw new Error(data.error ?? "解析失败");
       }
-      toast.success(`已成功生成 ${data.count ?? 0} 道题目`);
+      const n = data.count ?? 0;
+      toast.success(`已生成 ${n} 道题目（草稿状态）`);
       setUrl("");
-      onSuccess?.();
+      setGeneratedCount(n);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "解析失败");
     } finally {
@@ -171,8 +342,23 @@ function UrlParsePanel({
     }
   };
 
+  const handleGoPreview = () => {
+    setGeneratedCount(null);
+    onSuccess?.();
+  };
+
   return (
     <div className="space-y-6 font-serif">
+      {generatedCount !== null && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="text-foreground">
+            已生成 {generatedCount} 道题目（草稿状态），请在「题目管理」中预览和发布。
+          </p>
+          <Button type="button" className="mt-3" size="sm" onClick={handleGoPreview}>
+            前往预览
+          </Button>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="url-input">网页 URL</Label>
         <Input
@@ -221,6 +407,7 @@ function TextGeneratePanel({
   const [text, setText] = React.useState("");
   const [count, setCount] = React.useState(10);
   const [loading, setLoading] = React.useState(false);
+  const [generatedCount, setGeneratedCount] = React.useState<number | null>(null);
 
   const handleGenerate = async () => {
     if (!text.trim()) {
@@ -238,9 +425,10 @@ function TextGeneratePanel({
       if (!res.ok) {
         throw new Error(data.error ?? "生成失败");
       }
-      toast.success(`已成功生成 ${data.count ?? 0} 道题目`);
+      const n = data.count ?? 0;
+      toast.success(`已生成 ${n} 道题目（草稿状态）`);
       setText("");
-      onSuccess?.();
+      setGeneratedCount(n);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "生成失败");
     } finally {
@@ -248,8 +436,23 @@ function TextGeneratePanel({
     }
   };
 
+  const handleGoPreview = () => {
+    setGeneratedCount(null);
+    onSuccess?.();
+  };
+
   return (
     <div className="space-y-6 font-serif">
+      {generatedCount !== null && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <p className="text-foreground">
+            已生成 {generatedCount} 道题目（草稿状态），请在「题目管理」中预览和发布。
+          </p>
+          <Button type="button" className="mt-3" size="sm" onClick={handleGoPreview}>
+            前往预览
+          </Button>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="text-input">粘贴文本内容</Label>
         <Textarea
@@ -300,10 +503,23 @@ export default function EditBankPage({
     id: string;
     title: string;
     creatorId: string;
+    visibility: BankVisibility;
+    visibleDepartments: string[];
   } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [listRefreshKey, setListRefreshKey] = React.useState(0);
   const [activeTab, setActiveTab] = React.useState("manual");
+  const [editVisibility, setEditVisibility] = React.useState<BankVisibility>("PRIVATE");
+  const [editDepartments, setEditDepartments] = React.useState<string[]>([]);
+  const [deptDraft, setDeptDraft] = React.useState("");
+  const [savingVisibility, setSavingVisibility] = React.useState(false);
+
+  React.useEffect(() => {
+    if (bank) {
+      setEditVisibility(bank.visibility);
+      setEditDepartments([...bank.visibleDepartments]);
+    }
+  }, [bank]);
 
   const handleGenerateSuccess = () => {
     setListRefreshKey((k) => k + 1);
@@ -330,6 +546,47 @@ export default function EditBankPage({
 
   const isCreator =
     !!session?.user?.id && !!bank && bank.creatorId === session.user.id;
+
+  const saveVisibility = async () => {
+    if (!bank) return;
+    if (editVisibility === "PARTIAL" && editDepartments.length === 0) {
+      toast.error("部分可见时请至少添加一个部门");
+      return;
+    }
+    setSavingVisibility(true);
+    try {
+      const res = await fetch(`/api/banks/${bankId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visibility: editVisibility,
+          visibleDepartments:
+            editVisibility === "PARTIAL" ? editDepartments : [],
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "保存失败");
+        return;
+      }
+      toast.success("可见范围已更新");
+      setBank((prev) =>
+        prev
+          ? {
+              ...prev,
+              visibility: data.visibility ?? editVisibility,
+              visibleDepartments: Array.isArray(data.visibleDepartments)
+                ? data.visibleDepartments
+                : editDepartments,
+            }
+          : prev
+      );
+    } catch {
+      toast.error("保存失败");
+    } finally {
+      setSavingVisibility(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -358,8 +615,11 @@ export default function EditBankPage({
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList variant="line" className="w-full">
-          <TabsTrigger value="manual" className="flex-1">
+        <TabsList variant="line" className="w-full flex-wrap gap-1 h-auto py-1">
+          <TabsTrigger value="settings" className="flex-1 min-w-[4.5rem]">
+            设置
+          </TabsTrigger>
+          <TabsTrigger value="manual" className="flex-1 min-w-[4.5rem]">
             手动录入
           </TabsTrigger>
           <TabsTrigger value="file" className="flex-1">
@@ -371,10 +631,98 @@ export default function EditBankPage({
           <TabsTrigger value="text" className="flex-1">
             AI 文本生成
           </TabsTrigger>
-          <TabsTrigger value="manage" className="flex-1">
+          <TabsTrigger value="json" className="flex-1">
+            JSON 导入
+          </TabsTrigger>
+          <TabsTrigger value="manage" className="flex-1 min-w-[4.5rem]">
             题目管理
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="settings" className="mt-6">
+          {isCreator ? (
+            <div className="mx-auto max-w-lg space-y-6 font-serif">
+              <div className="space-y-2">
+                <Label>可见范围</Label>
+                <Select
+                  value={editVisibility}
+                  onValueChange={(v) => setEditVisibility(v as BankVisibility)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="仅自己可见">
+                      {VISIBILITY_LABELS[editVisibility]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PRIVATE">仅自己可见</SelectItem>
+                    <SelectItem value="PUBLIC">公开</SelectItem>
+                    <SelectItem value="PARTIAL">部分可见</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editVisibility === "PARTIAL" && (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    指定可访问的部门名称（需与用户侧部门匹配）
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={deptDraft}
+                      onChange={(e) => setDeptDraft(e.target.value)}
+                      placeholder="部门名称"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const v = deptDraft.trim();
+                          if (v && !editDepartments.includes(v)) {
+                            setEditDepartments((d) => [...d, v]);
+                            setDeptDraft("");
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        const v = deptDraft.trim();
+                        if (!v) return;
+                        if (editDepartments.includes(v)) {
+                          toast.error("该部门已添加");
+                          return;
+                        }
+                        setEditDepartments((d) => [...d, v]);
+                        setDeptDraft("");
+                      }}
+                    >
+                      添加
+                    </Button>
+                  </div>
+                  {editDepartments.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {editDepartments.map((d) => (
+                        <Badge
+                          key={d}
+                          variant="secondary"
+                          className="cursor-pointer font-normal"
+                          onClick={() =>
+                            setEditDepartments((prev) => prev.filter((x) => x !== d))
+                          }
+                        >
+                          {d} ×
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <Button onClick={saveVisibility} disabled={savingVisibility}>
+                {savingVisibility ? "保存中…" : "保存可见范围"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">仅题库创建者可修改设置</p>
+          )}
+        </TabsContent>
         <TabsContent value="manual" className="mt-6">
           {isCreator ? (
             <QuestionForm
@@ -420,6 +768,18 @@ export default function EditBankPage({
           ) : (
             <p className="text-muted-foreground text-sm">
               仅题库创建者可使用 AI 生成
+            </p>
+          )}
+        </TabsContent>
+        <TabsContent value="json" className="mt-6">
+          {isCreator ? (
+            <JsonImportPanel
+              bankId={bankId}
+              onSuccess={() => setListRefreshKey((k) => k + 1)}
+            />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              仅题库创建者可导入 JSON
             </p>
           )}
         </TabsContent>

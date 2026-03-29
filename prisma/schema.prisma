@@ -42,28 +42,40 @@ model VerificationToken {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  uid           String?        @unique
-  email         String?        @unique
-  name          String?
-  image         String?
-  emailVerified DateTime?
-  accounts      Account[]
-  sessions      Session[]
-  banks         QuestionBank[]
+  id                      String         @id @default(cuid())
+  uid                     String?        @unique
+  email                   String?        @unique
+  name                    String?
+  image                   String?
+  emailVerified           DateTime?
+  accounts                Account[]
+  sessions                Session[]
+  banks                   QuestionBank[]
+  comments                Comment[]
+  commentLikes            CommentLike[]
+  subscribedSubscriptions Subscription[] @relation("SubscribedBy")
+}
+
+enum Visibility {
+  PRIVATE
+  PUBLIC
+  PARTIAL
 }
 
 model QuestionBank {
-  id              String         @id @default(cuid())
-  title           String
-  description     String?
-  creatorId       String
-  subscriberCount Int            @default(0)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  creator         User           @relation(fields: [creatorId], references: [id])
-  questions       Question[]
-  subscriptions   Subscription[]
+  id                 String         @id @default(cuid())
+  title              String
+  description        String?
+  creatorId          String
+  subscriberCount    Int            @default(0)
+  visibility         Visibility     @default(PRIVATE)
+  visibleDepartments String[]       @default([])
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  creator            User           @relation(fields: [creatorId], references: [id])
+  questions          Question[]
+  subscriptions      Subscription[]
+  comments           Comment[]
 }
 
 enum TargetType {
@@ -97,15 +109,25 @@ model Question {
   pushLogs      PushLog[]
 }
 
+enum EndCondition {
+  END_AFTER_COMPLETE
+  REPEAT_N_TIMES
+}
+
 model Subscription {
-  id         String       @id @default(cuid())
-  targetType TargetType   @default(USER)
-  targetId   String
-  bankId     String
-  pushTimes  String[]     @default(["09:30", "14:00", "17:00"])
-  isActive   Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  bank       QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  targetType   TargetType   @default(USER)
+  targetId     String
+  bankId       String
+  pushTimes    String[]     @default(["09:30", "14:00", "17:00"])
+  isActive     Boolean      @default(true)
+  endCondition EndCondition @default(END_AFTER_COMPLETE)
+  repeatCount  Int          @default(0)
+  currentCycle Int          @default(0)
+  subscriberId String?
+  createdAt    DateTime     @default(now())
+  bank         QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  subscriber   User?        @relation("SubscribedBy", fields: [subscriberId], references: [id])
 
   @@unique([targetType, targetId, bankId])
   @@index([targetType, targetId])
@@ -121,4 +143,35 @@ model PushLog {
 
   @@index([targetType, targetId, questionId])
   @@index([targetType, targetId])
+}
+
+model Comment {
+  id        String        @id @default(cuid())
+  content   String
+  bankId    String
+  userId    String
+  parentId  String?
+  likeCount Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  bank      QuestionBank  @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("CommentReplies")
+  likes     CommentLike[]
+
+  @@index([bankId, createdAt])
+  @@index([bankId, likeCount])
+  @@index([parentId])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  createdAt DateTime @default(now())
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
 }

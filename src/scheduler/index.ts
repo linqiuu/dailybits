@@ -2,7 +2,7 @@ import "dotenv/config";
 import cron from "node-cron";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
-import type { TargetType } from "../generated/prisma/client.js";
+import type { TargetType, EndCondition } from "../generated/prisma/client.js";
 import Holidays from "date-holidays";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
@@ -75,17 +75,49 @@ async function selectQuestion(
     orderBy: { createdAt: "desc" },
   });
   if (unpushed) return unpushed;
+  return null;
+}
 
-  const count = await prisma.question.count({
-    where: { bankId, status: "PUBLISHED" },
-  });
-  if (count === 0) return null;
+async function handleSubscriptionComplete(sub: {
+  id: string;
+  targetType: TargetType;
+  targetId: string;
+  bankId: string;
+  endCondition: EndCondition;
+  repeatCount: number;
+  currentCycle: number;
+}): Promise<boolean> {
+  if (
+    sub.endCondition === "REPEAT_N_TIMES" &&
+    sub.currentCycle < sub.repeatCount
+  ) {
+    await prisma.$transaction([
+      prisma.pushLog.deleteMany({
+        where: {
+          targetType: sub.targetType,
+          targetId: sub.targetId,
+          question: { bankId: sub.bankId },
+        },
+      }),
+      prisma.subscription.update({
+        where: { id: sub.id },
+        data: { currentCycle: { increment: 1 } },
+      }),
+    ]);
+    console.log(
+      `[Scheduler] Cycle ${sub.currentCycle + 1}/${sub.repeatCount} for ${sub.targetType}:${sub.targetId}, resetting push logs`
+    );
+    return true;
+  }
 
-  const skip = Math.floor(Math.random() * count);
-  return prisma.question.findFirst({
-    where: { bankId, status: "PUBLISHED" },
-    skip,
+  await prisma.subscription.update({
+    where: { id: sub.id },
+    data: { isActive: false },
   });
+  console.log(
+    `[Scheduler] Subscription ${sub.id} completed, deactivated`
+  );
+  return false;
 }
 
 async function resolveReceiver(
@@ -143,8 +175,15 @@ cron.schedule("* * * * *", async () => {
 
   for (const sub of matchedSubs) {
     try {
-      const question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
-      if (!question) continue;
+      let question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
+
+      if (!question) {
+        const continued = await handleSubscriptionComplete(sub);
+        if (continued) {
+          question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
+        }
+        if (!question) continue;
+      }
 
       const receiver = await resolveReceiver(sub.targetType, sub.targetId);
       const payload = {

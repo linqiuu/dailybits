@@ -17,7 +17,7 @@ export default async function BankDetailPage({ params }: PageProps) {
     where: { id },
     include: {
       creator: {
-        select: { id: true, name: true, image: true },
+        select: { id: true, name: true, image: true, uid: true },
       },
       questions: {
         orderBy: { createdAt: "asc" },
@@ -38,6 +38,8 @@ export default async function BankDetailPage({ params }: PageProps) {
     id: string;
     pushTimes: string[];
     isActive: boolean;
+    endCondition: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+    repeatCount: number;
   } | null = null;
   let pushedCount = 0;
 
@@ -50,6 +52,13 @@ export default async function BankDetailPage({ params }: PageProps) {
             targetId: session.user.id,
             bankId: id,
           },
+        },
+        select: {
+          id: true,
+          pushTimes: true,
+          isActive: true,
+          endCondition: true,
+          repeatCount: true,
         },
       }),
       prisma.pushLog.findMany({
@@ -67,6 +76,8 @@ export default async function BankDetailPage({ params }: PageProps) {
         id: sub.id,
         pushTimes: sub.pushTimes,
         isActive: sub.isActive,
+        endCondition: sub.endCondition,
+        repeatCount: sub.repeatCount,
       };
     }
     pushedCount = pushed.length;

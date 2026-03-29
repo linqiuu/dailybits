@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { GroupDashboard } from "@/components/group/group-dashboard";
 
 interface PageProps {
@@ -6,6 +7,10 @@ interface PageProps {
 
 export default async function GroupPage({ params }: PageProps) {
   const { groupId } = await params;
+
+  if (!/^\d+$/.test(groupId)) {
+    notFound();
+  }
 
   return (
     <div className="page-enter space-y-6">

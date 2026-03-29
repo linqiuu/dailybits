@@ -8,6 +8,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { groupId, id } = await context.params;
 
+    if (!/^\d+$/.test(groupId)) {
+      return NextResponse.json({ error: "Invalid groupId" }, { status: 400 });
+    }
+
     const subscription = await prisma.subscription.findUnique({
       where: { id },
     });
@@ -70,6 +74,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { groupId, id } = await context.params;
 
+    if (!/^\d+$/.test(groupId)) {
+      return NextResponse.json({ error: "Invalid groupId" }, { status: 400 });
+    }
+
     const subscription = await prisma.subscription.findUnique({
       where: { id },
     });
@@ -84,13 +92,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.$transaction([
-      prisma.subscription.delete({ where: { id } }),
-      prisma.questionBank.update({
-        where: { id: subscription.bankId },
-        data: { subscriberCount: { decrement: 1 } },
-      }),
-    ]);
+    await prisma.subscription.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

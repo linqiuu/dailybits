@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
 
@@ -23,6 +31,8 @@ interface SubscriptionPanelProps {
     id: string;
     pushTimes: string[];
     isActive: boolean;
+    endCondition: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+    repeatCount: number;
   } | null;
   totalQuestions: number;
   pushedCount: number;
@@ -38,9 +48,35 @@ export function SubscriptionPanel({
   const [pushTimes, setPushTimes] = useState<string[]>(
     initialSubscription?.pushTimes ?? []
   );
+  const [endCondition, setEndCondition] = useState<
+    "END_AFTER_COMPLETE" | "REPEAT_N_TIMES"
+  >(initialSubscription?.endCondition ?? "END_AFTER_COMPLETE");
+  const [repeatCount, setRepeatCount] = useState(
+    Math.max(1, initialSubscription?.repeatCount ?? 1)
+  );
   const [newTime, setNewTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    setSubscription(initialSubscription ?? null);
+    if (initialSubscription) {
+      setPushTimes(initialSubscription.pushTimes);
+      setEndCondition(initialSubscription.endCondition);
+      setRepeatCount(Math.max(1, initialSubscription.repeatCount || 1));
+    } else {
+      setPushTimes([]);
+    }
+  }, [initialSubscription]);
+
+  useEffect(() => {
+    if (editOpen && subscription) {
+      setPushTimes(subscription.pushTimes);
+      setEndCondition(subscription.endCondition);
+      setRepeatCount(Math.max(1, subscription.repeatCount || 1));
+      setNewTime("");
+    }
+  }, [editOpen, subscription]);
 
   if (!subscription) return null;
 
@@ -73,22 +109,41 @@ export function SubscriptionPanel({
       toast.error("请至少保留一个推送时间");
       return;
     }
+    if (endCondition === "REPEAT_N_TIMES" && (!Number.isFinite(repeatCount) || repeatCount < 1)) {
+      toast.error("循环次数须为大于 0 的整数");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`/api/subscriptions/${subscription.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pushTimes }),
+        body: JSON.stringify({
+          pushTimes,
+          endCondition,
+          repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "更新失败");
         return;
       }
-      toast.success("推送时间已更新");
+      toast.success("已更新");
+      const nextEnd = data.endCondition as "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+      const nextRepeat = typeof data.repeatCount === "number" ? data.repeatCount : 0;
       setSubscription((prev) =>
-        prev ? { ...prev, pushTimes: data.pushTimes } : prev
+        prev
+          ? {
+              ...prev,
+              pushTimes: data.pushTimes,
+              endCondition: nextEnd ?? prev.endCondition,
+              repeatCount: nextRepeat,
+            }
+          : prev
       );
+      if (nextEnd) setEndCondition(nextEnd);
+      if (nextEnd === "REPEAT_N_TIMES") setRepeatCount(Math.max(1, nextRepeat));
       setEditOpen(false);
       router.refresh();
     } catch {
@@ -129,6 +184,12 @@ export function SubscriptionPanel({
           <p className="text-sm text-muted-foreground">
             推送时间：{subscription.pushTimes.join("、")}
           </p>
+          <p className="text-sm text-muted-foreground">
+            结束条件：
+            {subscription.endCondition === "REPEAT_N_TIMES"
+              ? `循环推送（${subscription.repeatCount} 次）`
+              : "推送完结束"}
+          </p>
           <p className="text-xs text-muted-foreground">
             默认仅工作日推送（自动跳过周末与法定节假日）
           </p>
@@ -146,6 +207,40 @@ export function SubscriptionPanel({
                 <DialogTitle>编辑推送时间</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>结束条件</Label>
+                  <Select
+                    value={endCondition}
+                    onValueChange={(v) =>
+                      setEndCondition(v as "END_AFTER_COMPLETE" | "REPEAT_N_TIMES")
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="END_AFTER_COMPLETE">推送完结束</SelectItem>
+                      <SelectItem value="REPEAT_N_TIMES">循环推送</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {endCondition === "REPEAT_N_TIMES" && (
+                    <div className="space-y-1.5 pt-1">
+                      <Label htmlFor="sub-repeat-count">循环次数</Label>
+                      <Input
+                        id="sub-repeat-count"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={repeatCount}
+                        onChange={(e) =>
+                          setRepeatCount(
+                            Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <Input
                     type="time"

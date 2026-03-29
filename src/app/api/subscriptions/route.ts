@@ -8,8 +8,61 @@ import {
   DEFAULT_PUSH_TIMES,
 } from "@/types";
 
+const END_CONDITIONS = ["END_AFTER_COMPLETE", "REPEAT_N_TIMES"] as const;
+type EndConditionValue = (typeof END_CONDITIONS)[number];
+
+function parseSubscriptionEndFields(body: {
+  endCondition?: unknown;
+  repeatCount?: unknown;
+}):
+  | { endCondition: EndConditionValue; repeatCount: number }
+  | NextResponse {
+  let endCondition: EndConditionValue = "END_AFTER_COMPLETE";
+  if (body.endCondition !== undefined) {
+    if (
+      typeof body.endCondition !== "string" ||
+      !END_CONDITIONS.includes(body.endCondition as EndConditionValue)
+    ) {
+      return NextResponse.json(
+        { error: "endCondition must be END_AFTER_COMPLETE or REPEAT_N_TIMES" },
+        { status: 400 }
+      );
+    }
+    endCondition = body.endCondition as EndConditionValue;
+  }
+
+  let repeatCount = 0;
+  if (body.repeatCount !== undefined) {
+    if (
+      typeof body.repeatCount !== "number" ||
+      !Number.isInteger(body.repeatCount) ||
+      body.repeatCount < 0
+    ) {
+      return NextResponse.json(
+        { error: "repeatCount must be a non-negative integer" },
+        { status: 400 }
+      );
+    }
+    repeatCount = body.repeatCount;
+  }
+
+  if (endCondition === "REPEAT_N_TIMES" && repeatCount <= 0) {
+    return NextResponse.json(
+      { error: "repeatCount must be greater than 0 when endCondition is REPEAT_N_TIMES" },
+      { status: 400 }
+    );
+  }
+
+  return { endCondition, repeatCount };
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const {
       bankId,
@@ -26,10 +79,6 @@ export async function POST(request: NextRequest) {
     let targetId: string;
 
     if (targetType === "USER") {
-      const session = await getServerSession(authOptions);
-      if (!session?.user?.id) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
       targetId = session.user.id;
     } else if (targetType === "GROUP") {
       if (!rawTargetId || typeof rawTargetId !== "string" || rawTargetId.trim() === "") {
@@ -45,6 +94,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const endParsed = parseSubscriptionEndFields(body);
+    if (endParsed instanceof NextResponse) return endParsed;
+    const { endCondition, repeatCount } = endParsed;
 
     if (!bankId || typeof bankId !== "string" || bankId.trim() === "") {
       return NextResponse.json(
@@ -114,6 +167,10 @@ export async function POST(request: NextRequest) {
           targetId,
           bankId: bank.id,
           pushTimes: validTimes,
+          endCondition,
+          repeatCount,
+          currentCycle: 0,
+          subscriberId: session.user.id,
         },
         include: {
           bank: {

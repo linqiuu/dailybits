@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +40,7 @@ interface SubscriptionItem {
   bankId: string;
   pushTimes: string[];
   isActive: boolean;
+  subscriber?: { id: string; name: string | null; uid: string | null } | null;
   bank: {
     id: string;
     title: string;
@@ -60,7 +63,7 @@ interface Bank {
   title: string;
   description: string | null;
   subscriberCount: number;
-  creator: { id: string; name: string | null; image: string | null };
+  creator: { id: string; name: string | null; image: string | null; uid?: string | null };
   _count: { questions: number };
   isSubscribed?: boolean;
 }
@@ -363,6 +366,8 @@ function GroupBankCard({
   index: number;
   onSubscribed: () => void;
 }) {
+  const { data: session, status: sessionStatus } = useSession();
+  const router = useRouter();
   const isSubscribed = !!subscription;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
@@ -439,8 +444,13 @@ function GroupBankCard({
       <CardContent className="flex flex-1 flex-col justify-between gap-3 pt-0">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{bank._count.questions} 题</span>
-          <span>{bank.subscriberCount} 人订阅</span>
-          {bank.creator.name && <span>by {bank.creator.name}</span>}
+          <span>{bank.subscriberCount} 人订阅过</span>
+          {bank.creator.name && (
+            <span>
+              by {bank.creator.name}
+              {bank.creator.uid ? ` (${bank.creator.uid})` : ""}
+            </span>
+          )}
         </div>
 
         {/* subscribed → show push times inline */}
@@ -470,7 +480,13 @@ function GroupBankCard({
             查看详情
           </Button>
 
-          {!isSubscribed && !atLimit && (
+          {!isSubscribed && !atLimit && sessionStatus === "loading" && (
+            <Button variant="default" size="sm" className="h-7 text-xs" disabled>
+              订阅
+            </Button>
+          )}
+
+          {!isSubscribed && !atLimit && session?.user && (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
                 订阅
@@ -528,6 +544,20 @@ function GroupBankCard({
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+          )}
+
+          {!isSubscribed && !atLimit && sessionStatus !== "loading" && !session?.user && (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                toast.info("请先登录");
+                router.push("/login");
+              }}
+            >
+              订阅
+            </Button>
           )}
 
           {!isSubscribed && atLimit && (
@@ -690,6 +720,10 @@ function GroupSubscriptionCard({
               </CardTitle>
             </Link>
           </div>
+          <p className="text-xs text-muted-foreground">
+            订阅人：{sub.subscriber?.name}
+            {sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}
+          </p>
           {sub.bank.description && (
             <p className="truncate text-xs text-muted-foreground">
               {sub.bank.description}
@@ -711,7 +745,7 @@ function GroupSubscriptionCard({
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              {pushed} / {total} 题 · {sub.bank.subscriberCount} 人订阅
+              {pushed} / {total} 题 · {sub.bank.subscriberCount} 人订阅过
             </p>
           </div>
         </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { CommentSection } from "@/components/bank/comment-section";
 
 interface BankDetailClientProps {
   bank: {
@@ -13,7 +14,7 @@ interface BankDetailClientProps {
     description: string | null;
     creatorId: string;
     subscriberCount: number;
-    creator: { id: string; name: string | null; image: string | null };
+    creator: { id: string; name: string | null; image: string | null; uid?: string | null };
     questions: Array<{
       id: string;
       content: string;
@@ -55,8 +56,9 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
               <p className="text-sm text-muted-foreground">{bank.description}</p>
             )}
             <p className="text-sm text-muted-foreground">
-              创建者：{bank.creator.name ?? "未知"} · {bank.questionCount} 题 ·{" "}
-              {bank.subscriberCount} 人订阅
+              创建者：{bank.creator.name ?? "未知"}
+              {bank.creator.uid ? ` (${bank.creator.uid})` : ""} · {bank.questionCount} 题 ·{" "}
+              {bank.subscriberCount} 人订阅过
             </p>
           </div>
           {isCreator && (
@@ -111,6 +113,15 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
               </table>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-serif">评论区</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CommentSection bankId={bank.id} canModerate={isCreator} />
         </CardContent>
       </Card>
     </>
