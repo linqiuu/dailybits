@@ -168,7 +168,9 @@ export function BankCard({
                           }
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue />
+                            <SelectValue>
+                              {endCondition === "REPEAT_N_TIMES" ? "循环推送" : "推送完结束"}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="END_AFTER_COMPLETE">推送完结束</SelectItem>

@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { CommentSection } from "@/components/bank/comment-section";
+
+const QUESTIONS_PER_PAGE = 30;
 
 interface BankDetailClientProps {
   bank: {
@@ -28,6 +31,13 @@ interface BankDetailClientProps {
 
 export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDetailClientProps) {
   const router = useRouter();
+  const [questionPage, setQuestionPage] = useState(1);
+
+  const totalQuestionPages = Math.ceil(bank.questions.length / QUESTIONS_PER_PAGE);
+  const paginatedQuestions = bank.questions.slice(
+    (questionPage - 1) * QUESTIONS_PER_PAGE,
+    questionPage * QUESTIONS_PER_PAGE
+  );
 
   async function handleDelete() {
     if (!confirm("确定要删除此题库吗？此操作不可恢复。")) return;
@@ -82,7 +92,14 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif">题目列表</CardTitle>
+          <CardTitle className="font-serif">
+            题目列表
+            {bank.questions.length > 0 && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                共 {bank.questions.length} 题
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {bank.questions.length === 0 ? (
@@ -90,28 +107,55 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
               暂无题目，添加题目后将在此展示
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b">
-                    <th className="pb-2 text-left font-medium">序号</th>
-                    <th className="pb-2 text-left font-medium">内容</th>
-                    <th className="pb-2 text-left font-medium">状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bank.questions.map((q, i) => (
-                    <tr key={q.id} className="border-b last:border-0">
-                      <td className="py-3">{i + 1}</td>
-                      <td className="py-3 text-muted-foreground line-clamp-2">
-                        {q.content}
-                      </td>
-                      <td className="py-3">{q.status === "PUBLISHED" ? "已发布" : "草稿"}</td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="pb-2 text-left font-medium">序号</th>
+                      <th className="pb-2 text-left font-medium">内容</th>
+                      <th className="pb-2 text-left font-medium">状态</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {paginatedQuestions.map((q, i) => (
+                      <tr key={q.id} className="border-b last:border-0">
+                        <td className="py-3">
+                          {(questionPage - 1) * QUESTIONS_PER_PAGE + i + 1}
+                        </td>
+                        <td className="py-3 text-muted-foreground line-clamp-2">
+                          {q.content}
+                        </td>
+                        <td className="py-3">{q.status === "PUBLISHED" ? "已发布" : "草稿"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {totalQuestionPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuestionPage((p) => Math.max(1, p - 1))}
+                    disabled={questionPage <= 1}
+                  >
+                    上一页
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    {questionPage} / {totalQuestionPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuestionPage((p) => Math.min(totalQuestionPages, p + 1))}
+                    disabled={questionPage >= totalQuestionPages}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

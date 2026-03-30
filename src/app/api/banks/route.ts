@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserDepartments } from "@/lib/getUserDepartments";
 import type { Prisma } from "@/generated/prisma/client";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
 const VISIBILITY_VALUES = ["PRIVATE", "PUBLIC", "PARTIAL"] as const;
 type VisibilityValue = (typeof VISIBILITY_VALUES)[number];
