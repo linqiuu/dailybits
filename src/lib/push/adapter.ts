@@ -1,6 +1,6 @@
-import type { PushPayload } from "@/types";
+import type { DigestPushPayload, PushPayload } from "@/types";
 
-export async function pushToTarget(payload: PushPayload): Promise<boolean> {
+export async function pushToTarget(payload: PushPayload | DigestPushPayload): Promise<boolean> {
   const url = process.env.PUSH_API_URL;
   if (!url) {
     console.log("[PUSH MOCK]", JSON.stringify(payload, null, 2));

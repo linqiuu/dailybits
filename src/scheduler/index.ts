@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
 import type { TargetType, EndCondition } from "../generated/prisma/client.js";
 import Holidays from "date-holidays";
+import { runDueDigestSubscriptions } from "../lib/digest/delivery.js";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -150,6 +151,11 @@ async function pushToEndpoint(payload: PushPayload): Promise<boolean> {
 
 cron.schedule("* * * * *", async () => {
   const now = new Date();
+  const currentTime = getCurrentTimeHHMM();
+  console.log(`[Scheduler] Tick at ${currentTime}`);
+
+  await runDueDigestSubscriptions(prisma, currentTime, schedulerTZ);
+
   const skipDecision = shouldSkipPushToday(now);
   if (skipDecision.skip) {
     if (skipDecision.reason === "holiday") {
@@ -161,9 +167,6 @@ cron.schedule("* * * * *", async () => {
     }
     return;
   }
-
-  const currentTime = getCurrentTimeHHMM();
-  console.log(`[Scheduler] Tick at ${currentTime}`);
 
   const matchedSubs = await prisma.subscription.findMany({
     where: {

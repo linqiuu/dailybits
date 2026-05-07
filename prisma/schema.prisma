@@ -54,6 +54,7 @@ model User {
   comments                Comment[]
   commentLikes            CommentLike[]
   subscribedSubscriptions Subscription[] @relation("SubscribedBy")
+  digestSubscriptions     DigestSubscription[] @relation("DigestSubscribedBy")
 }
 
 enum Visibility {
@@ -114,6 +115,12 @@ enum EndCondition {
   REPEAT_N_TIMES
 }
 
+enum DigestType {
+  GITHUB_TRENDING
+  AI_NEWS
+  ARXIV_AI_PAPERS
+}
+
 model Subscription {
   id           String       @id @default(cuid())
   targetType   TargetType   @default(USER)
@@ -133,6 +140,35 @@ model Subscription {
   @@index([targetType, targetId])
 }
 
+model DigestSubscription {
+  id           String     @id @default(cuid())
+  targetType   TargetType @default(USER)
+  targetId     String
+  digestType   DigestType
+  pushTimes    String[]   @default(["09:00"])
+  isActive     Boolean    @default(true)
+  subscriberId String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subscriber   User?      @relation("DigestSubscribedBy", fields: [subscriberId], references: [id])
+
+  @@unique([targetType, targetId, digestType])
+  @@index([targetType, targetId])
+  @@index([digestType, isActive])
+}
+
+model DigestCache {
+  id         String     @id @default(cuid())
+  digestType DigestType
+  digestDate String
+  items      Json
+  fetchedAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([digestType, digestDate])
+  @@index([digestDate])
+}
+
 model PushLog {
   id         String     @id @default(cuid())
   targetType TargetType @default(USER)
@@ -143,6 +179,19 @@ model PushLog {
 
   @@index([targetType, targetId, questionId])
   @@index([targetType, targetId])
+}
+
+model DigestPushLog {
+  id         String     @id @default(cuid())
+  targetType TargetType @default(USER)
+  targetId   String
+  digestType DigestType
+  digestDate String
+  pushedAt   DateTime   @default(now())
+
+  @@unique([targetType, targetId, digestType, digestDate])
+  @@index([targetType, targetId])
+  @@index([digestType, digestDate])
 }
 
 model Comment {

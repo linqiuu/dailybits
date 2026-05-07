@@ -1,5 +1,12 @@
 import { MessageCircle } from "lucide-react";
 import { BankExplorer } from "@/components/bank/bank-explorer";
+import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 export default function Home() {
   const groupChatId = process.env.GROUP_CHAT_ID?.trim();
@@ -27,7 +34,22 @@ export default function Home() {
           </span>
         </div>
       ) : null}
-      <BankExplorer />
+      <Tabs defaultValue="banks" className="space-y-5">
+        <TabsList variant="line" className="h-auto w-full justify-start overflow-x-auto">
+          <TabsTrigger value="banks" className="min-h-9 px-3">
+            题库
+          </TabsTrigger>
+          <TabsTrigger value="digests" className="min-h-9 px-3">
+            固定推送
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="banks">
+          <BankExplorer />
+        </TabsContent>
+        <TabsContent value="digests">
+          <DigestSubscriptionList />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
