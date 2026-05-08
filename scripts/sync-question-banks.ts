@@ -12,6 +12,11 @@ import {
 const QUESTION_BANKS_DIR = path.join(process.cwd(), "question-banks");
 const EXTERNAL_SOURCE = "local-question-banks";
 
+type SyncOptions = {
+  adoptExisting: boolean;
+  replace: boolean;
+};
+
 type RawQuestion = {
   content: string;
   options: Prisma.InputJsonValue;
@@ -32,6 +37,38 @@ function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function parseArgs(argv: string[]): SyncOptions {
+  const options: SyncOptions = {
+    adoptExisting: false,
+    replace: false,
+  };
+  const supported = new Set(["--adopt-existing", "--replace", "--help"]);
+
+  for (const arg of argv) {
+    if (!supported.has(arg)) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    if (arg === "--help") {
+      console.log(
+        [
+          "Usage: npm run sync:question-banks -- [--adopt-existing] [--replace]",
+          "",
+          "Options:",
+          "  --adopt-existing  Bind a unique same-title manual bank owned by the sync owner",
+          "                    when no local-sync bank exists for the JSON file.",
+          "  --replace         Make the JSON file the current published set by moving",
+          "                    bank questions absent from JSON back to DRAFT.",
+        ].join("\n")
+      );
+      process.exit(0);
+    }
+    if (arg === "--adopt-existing") options.adoptExisting = true;
+    if (arg === "--replace") options.replace = true;
+  }
+
+  return options;
+}
+
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stableValue);
@@ -50,6 +87,13 @@ function hashJson(value: unknown) {
   return createHash("sha256")
     .update(JSON.stringify(stableValue(value)))
     .digest("hex");
+}
+
+function questionIdentityHash(content: string, correctAnswer: string) {
+  return hashJson({
+    content: normalizeText(content),
+    correctAnswer: normalizeText(correctAnswer),
+  });
 }
 
 function isVisibility(value: unknown): value is Visibility {
@@ -163,7 +207,122 @@ async function listJsonFiles() {
     .sort((a, b) => a.localeCompare(b));
 }
 
+async function resolveBank(
+  tx: Prisma.TransactionClient,
+  slug: string,
+  parsed: ParsedBankFile,
+  ownerId: string,
+  options: SyncOptions
+) {
+  const existingSynced = await tx.questionBank.findUnique({
+    where: {
+      externalSource_externalSlug: {
+        externalSource: EXTERNAL_SOURCE,
+        externalSlug: slug,
+      },
+    },
+    select: { id: true, title: true },
+  });
+
+  if (existingSynced) {
+    const bank = await tx.questionBank.update({
+      where: { id: existingSynced.id },
+      data: {
+        title: parsed.title,
+        description: parsed.description,
+        visibility: parsed.visibility,
+        visibleDepartments: parsed.visibility === "PARTIAL" ? undefined : [],
+        isOfficial: true,
+      },
+      select: { id: true, title: true },
+    });
+    return { ...bank, adopted: false, created: false };
+  }
+
+  if (options.adoptExisting) {
+    const candidates = await tx.questionBank.findMany({
+      where: {
+        creatorId: ownerId,
+        title: parsed.title,
+        externalSource: null,
+        externalSlug: null,
+      },
+      select: { id: true, title: true },
+    });
+
+    if (candidates.length > 1) {
+      throw new Error(
+        `${parsed.title}: found ${candidates.length} unbound manual banks with the same title. ` +
+          "Rename extras or bind one manually before using --adopt-existing."
+      );
+    }
+
+    if (candidates.length === 1) {
+      const bank = await tx.questionBank.update({
+        where: { id: candidates[0].id },
+        data: {
+          title: parsed.title,
+          description: parsed.description,
+          visibility: parsed.visibility,
+          visibleDepartments: parsed.visibility === "PARTIAL" ? undefined : [],
+          isOfficial: true,
+          externalSource: EXTERNAL_SOURCE,
+          externalSlug: slug,
+        },
+        select: { id: true, title: true },
+      });
+      return { ...bank, adopted: true, created: false };
+    }
+  }
+
+  const bank = await tx.questionBank.create({
+    data: {
+      title: parsed.title,
+      description: parsed.description,
+      creatorId: ownerId,
+      visibility: parsed.visibility,
+      visibleDepartments: [],
+      isOfficial: true,
+      externalSource: EXTERNAL_SOURCE,
+      externalSlug: slug,
+    },
+    select: { id: true, title: true },
+  });
+
+  return { ...bank, adopted: false, created: true };
+}
+
+function addExistingQuestion(
+  map: Map<string, Array<{
+    id: string;
+    status: "DRAFT" | "PUBLISHED";
+    externalIdentityHash: string | null;
+    externalContentHash: string | null;
+  }>>,
+  question: {
+    id: string;
+    status: "DRAFT" | "PUBLISHED";
+    content: string;
+    correctAnswer: string;
+    externalIdentityHash: string | null;
+    externalContentHash: string | null;
+  }
+) {
+  const identity =
+    question.externalIdentityHash ??
+    questionIdentityHash(question.content, question.correctAnswer);
+  const bucket = map.get(identity) ?? [];
+  bucket.push({
+    id: question.id,
+    status: question.status,
+    externalIdentityHash: question.externalIdentityHash,
+    externalContentHash: question.externalContentHash,
+  });
+  map.set(identity, bucket);
+}
+
 async function main() {
+  const options = parseArgs(process.argv.slice(2));
   const ownerUid = process.env.QUESTION_SYNC_OWNER_UID?.trim();
   if (!ownerUid) {
     throw new Error("QUESTION_SYNC_OWNER_UID is required");
@@ -199,50 +358,50 @@ async function main() {
       const parsed = parseBankFile(fileName, JSON.parse(rawText));
 
       const result = await prisma.$transaction(async (tx) => {
-        const bank = await tx.questionBank.upsert({
-          where: {
-            externalSource_externalSlug: {
-              externalSource: EXTERNAL_SOURCE,
-              externalSlug: slug,
-            },
-          },
-          create: {
-            title: parsed.title,
-            description: parsed.description,
-            creatorId: owner.id,
-            visibility: parsed.visibility,
-            visibleDepartments: [],
-            isOfficial: true,
-            externalSource: EXTERNAL_SOURCE,
-            externalSlug: slug,
-          },
-          update: {
-            title: parsed.title,
-            description: parsed.description,
-            visibility: parsed.visibility,
-            visibleDepartments: parsed.visibility === "PARTIAL" ? undefined : [],
-            isOfficial: true,
-          },
-          select: { id: true, title: true },
-        });
+        const bank = await resolveBank(tx, slug, parsed, owner.id, options);
 
         let created = 0;
         let updated = 0;
         let skipped = 0;
+        const keptQuestionIds: string[] = [];
+        const existingQuestions = await tx.question.findMany({
+          where: { bankId: bank.id },
+          select: {
+            id: true,
+            content: true,
+            correctAnswer: true,
+            status: true,
+            externalIdentityHash: true,
+            externalContentHash: true,
+          },
+        });
+        const existingByIdentity = new Map<
+          string,
+          Array<{
+            id: string;
+            status: "DRAFT" | "PUBLISHED";
+            externalIdentityHash: string | null;
+            externalContentHash: string | null;
+          }>
+        >();
+        for (const existing of existingQuestions) {
+          addExistingQuestion(existingByIdentity, existing);
+        }
 
         for (const question of parsed.questions) {
-          const existing = await tx.question.findUnique({
-            where: {
-              bankId_externalIdentityHash: {
-                bankId: bank.id,
-                externalIdentityHash: question.identityHash,
-              },
-            },
-            select: { id: true, externalContentHash: true },
-          });
+          const matches = existingByIdentity.get(question.identityHash) ?? [];
+          const externalMatches = matches.filter(
+            (match) => match.externalIdentityHash === question.identityHash
+          );
+          const existing =
+            externalMatches.length === 1
+              ? externalMatches[0]
+              : matches.length === 1
+                ? matches[0]
+                : null;
 
           if (!existing) {
-            await tx.question.create({
+            const createdQuestion = await tx.question.create({
               data: {
                 bankId: bank.id,
                 content: question.content,
@@ -254,12 +413,20 @@ async function main() {
                 externalIdentityHash: question.identityHash,
                 externalContentHash: question.contentHash,
               },
+              select: { id: true },
             });
+            keptQuestionIds.push(createdQuestion.id);
             created++;
             continue;
           }
 
-          if (existing.externalContentHash === question.contentHash) {
+          keptQuestionIds.push(existing.id);
+
+          if (
+            existing.externalIdentityHash === question.identityHash &&
+            existing.externalContentHash === question.contentHash &&
+            existing.status === "PUBLISHED"
+          ) {
             skipped++;
             continue;
           }
@@ -273,6 +440,7 @@ async function main() {
               explanation: question.explanation,
               status: "PUBLISHED",
               source: "LOCAL_SYNC",
+              externalIdentityHash: question.identityHash,
               externalContentHash: question.contentHash,
             },
           });
@@ -286,12 +454,26 @@ async function main() {
                 data: { isActive: true, currentCycle: 0 },
               })
             : { count: 0 };
+        const replaced =
+          options.replace
+            ? await tx.question.updateMany({
+                where: {
+                  bankId: bank.id,
+                  id: { notIn: keptQuestionIds },
+                  status: "PUBLISHED",
+                },
+                data: { status: "DRAFT" },
+              })
+            : { count: 0 };
 
         return {
           bankTitle: bank.title,
+          adopted: bank.adopted,
+          createdBank: bank.created,
           created,
           updated,
           skipped,
+          replaced: replaced.count,
           reactivated: reactivated.count,
         };
       });
@@ -299,7 +481,10 @@ async function main() {
       console.log(
         `[sync] ${fileName} -> ${result.bankTitle}: ` +
           `${result.created} created, ${result.updated} updated, ` +
-          `${result.skipped} skipped, ${result.reactivated} subscriptions reactivated`
+          `${result.skipped} skipped, ${result.replaced} drafted by replace, ` +
+          `${result.reactivated} subscriptions reactivated` +
+          `${result.adopted ? ", adopted existing bank" : ""}` +
+          `${result.createdBank ? ", created bank" : ""}`
       );
     }
   } finally {

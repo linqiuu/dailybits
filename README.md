@@ -207,7 +207,23 @@ cd ..
 npm run sync:question-banks
 ```
 
-每个 `.json` 文件会自动对应一个题库，文件名就是默认题库名，例如 `英语.json` 会创建或更新「英语」题库。同步只新增或更新题目，不会自动删除 JSON 中已经移除的旧题，避免影响订阅和历史推送记录。新增题目会以 `PUBLISHED` 状态导入；如果该题库有已经停用的订阅，新增题目后会自动重新激活订阅。
+每个 `.json` 文件会自动对应一个题库，文件名就是默认题库名，例如 `英语.json` 会创建或更新「英语」题库。默认同步只新增或更新题目，不会自动删除 JSON 中已经移除的旧题，避免影响订阅和历史推送记录。新增题目会以 `PUBLISHED` 状态导入；如果该题库有已经停用的订阅，新增题目后会自动重新激活订阅。
+
+如果已有同名手动题库已经被用户订阅，可以先把它接管为本地同步题库：
+
+```bash
+npm run sync:question-banks -- --adopt-existing
+```
+
+`--adopt-existing` 会在找不到已绑定同步题库时，查找当前同步用户创建的唯一同名手动题库，并给它绑定 `externalSource=local-question-banks` 和对应的文件名 `externalSlug`。题库 `id` 不变，因此已有订阅不会迁移或丢失。
+
+如果希望 JSON 成为题库的当前有效题目集合，可以使用替换模式：
+
+```bash
+npm run sync:question-banks -- --adopt-existing --replace
+```
+
+`--replace` 不会物理删除旧题，而是把不在 JSON 中的旧题改回 `DRAFT`，后续推送只会从 `PUBLISHED` 题目中选择。这样可以保留历史推送记录，也方便误操作后恢复。
 
 最简单的题库格式是题目数组：
 
