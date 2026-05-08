@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { DigestType } from "../../types";
+import { getLlmTimeoutMs } from "../llm/config";
 
 export interface DigestItem {
   title: string;
@@ -54,7 +55,7 @@ const DEFAULT_AI_NEWS_FEEDS = [
   "https://news.mit.edu/rss/topic/artificial-intelligence2",
 ];
 const DEFAULT_ARXIV_AI_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "stat.ML"];
-const DEFAULT_README_SUMMARY_MAX_CHARS = 12000;
+const DEFAULT_README_SUMMARY_MAX_CHARS = 5000;
 const DEFAULT_README_SUMMARY_CONCURRENCY = 2;
 const DEFAULT_DIGEST_AI_CONCURRENCY = 3;
 const DEFAULT_NEWS_TRANSLATION_MAX_CHARS = 1800;
@@ -129,6 +130,27 @@ function formatDigestItem(item: DigestItem): string {
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 3).trim()}...`;
+}
+
+export function getGithubReadmeSummaryMaxChars(): number {
+  const value = Number(process.env.GITHUB_README_SUMMARY_MAX_CHARS ?? DEFAULT_README_SUMMARY_MAX_CHARS);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_README_SUMMARY_MAX_CHARS;
+}
+
+export function buildGithubReadmeSummaryText(
+  repo: Pick<GithubRepo, "fullName" | "description" | "language">,
+  readme: string,
+  maxChars = getGithubReadmeSummaryMaxChars(),
+): string {
+  return [
+    `Project: ${repo.fullName}`,
+    repo.description ? `GitHub description: ${repo.description}` : "",
+    repo.language ? `Language: ${repo.language}` : "",
+    "",
+    truncate(readme, maxChars),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function formatDisplayDate(value?: string): string | undefined {
@@ -243,6 +265,7 @@ function getDigestSummaryClient(): OpenAI | null {
   digestSummaryClient = new OpenAI({
     apiKey: process.env.LLM_API_KEY,
     baseURL: process.env.LLM_API_BASE_URL || undefined,
+    timeout: getLlmTimeoutMs(),
   });
   return digestSummaryClient;
 }
@@ -334,19 +357,10 @@ async function fetchGithubReadme(repo: GithubRepo): Promise<string | undefined> 
 }
 
 async function summarizeGithubReadme(repo: GithubRepo, readme: string): Promise<string | undefined> {
-  const maxChars = Number(process.env.GITHUB_README_SUMMARY_MAX_CHARS ?? DEFAULT_README_SUMMARY_MAX_CHARS);
   return rewriteWithDigestAi(
-    [
-      `Project: ${repo.fullName}`,
-      repo.description ? `GitHub description: ${repo.description}` : "",
-      repo.language ? `Language: ${repo.language}` : "",
-      "",
-      readme,
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    buildGithubReadmeSummaryText(repo, readme),
     "请基于这个 GitHub 项目的 README，用 80-120 个中文字符总结：它解决什么问题、核心能力、适合谁关注。",
-    maxChars,
+    getGithubReadmeSummaryMaxChars() + 500,
   );
 }
 

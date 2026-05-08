@@ -303,100 +303,6 @@ function FileUploadPanel({
   );
 }
 
-function UrlParsePanel({
-  bankId,
-  onSuccess,
-}: {
-  bankId: string;
-  onSuccess?: () => void;
-}) {
-  const [url, setUrl] = React.useState("");
-  const [count, setCount] = React.useState(10);
-  const [loading, setLoading] = React.useState(false);
-  const [generatedCount, setGeneratedCount] = React.useState<number | null>(null);
-
-  const handleGenerate = async () => {
-    if (!url.trim()) {
-      toast.error("请输入网页 URL");
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/banks/${bankId}/generate/url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim(), count }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error ?? "解析失败");
-      }
-      const n = data.count ?? 0;
-      toast.success(`已生成 ${n} 道题目（草稿状态）`);
-      setUrl("");
-      setGeneratedCount(n);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "解析失败");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoPreview = () => {
-    setGeneratedCount(null);
-    onSuccess?.();
-  };
-
-  return (
-    <div className="space-y-6 font-serif">
-      {generatedCount !== null && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-          <p className="text-foreground">
-            已生成 {generatedCount} 道题目（草稿状态），请在「题目管理」中预览和发布。
-          </p>
-          <Button type="button" className="mt-3" size="sm" onClick={handleGoPreview}>
-            前往预览
-          </Button>
-        </div>
-      )}
-      <div className="space-y-2">
-        <Label htmlFor="url-input">网页 URL</Label>
-        <Input
-          id="url-input"
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://example.com/article"
-          disabled={loading}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="url-count-select">题目数量</Label>
-          <Select
-            value={String(count)}
-            onValueChange={(v) => setCount(Number(v))}
-            disabled={loading}
-          >
-            <SelectTrigger id="url-count-select" className="w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="5">5</SelectItem>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="15">15</SelectItem>
-              <SelectItem value="20">20</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <Button onClick={handleGenerate} disabled={loading}>
-          {loading ? "正在解析网页，AI 生成中..." : "解析并生成"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function TextGeneratePanel({
   bankId,
   onSuccess,
@@ -625,9 +531,6 @@ export default function EditBankPage({
           <TabsTrigger value="file" className="flex-1">
             文件上传
           </TabsTrigger>
-          <TabsTrigger value="url" className="flex-1">
-            URL 解析
-          </TabsTrigger>
           <TabsTrigger value="text" className="flex-1">
             AI 文本生成
           </TabsTrigger>
@@ -744,18 +647,6 @@ export default function EditBankPage({
           ) : (
             <p className="text-muted-foreground text-sm">
               仅题库创建者可导入文件
-            </p>
-          )}
-        </TabsContent>
-        <TabsContent value="url" className="mt-6">
-          {isCreator ? (
-            <UrlParsePanel
-              bankId={bankId}
-              onSuccess={handleGenerateSuccess}
-            />
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              仅题库创建者可解析 URL
             </p>
           )}
         </TabsContent>

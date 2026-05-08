@@ -35,7 +35,7 @@ export default function Home() {
         </div>
       ) : null}
       <Tabs defaultValue="banks" className="space-y-5">
-        <TabsList variant="line" className="h-auto w-full justify-start overflow-x-auto">
+        <TabsList className="grid h-auto w-full grid-cols-2 p-1 sm:w-72">
           <TabsTrigger value="banks" className="min-h-9 px-3">
             题库
           </TabsTrigger>

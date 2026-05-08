@@ -52,13 +52,46 @@ function parsePushTimes(value: unknown): string[] | NextResponse {
   return [...new Set(validTimes)].sort();
 }
 
-export async function POST(request: NextRequest) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ groupId: string }> },
+) {
+  try {
+    const { groupId } = await context.params;
+    const subscriptions = await prisma.digestSubscription.findMany({
+      where: {
+        targetType: "GROUP",
+        targetId: groupId,
+        isActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({
+      subscriptions,
+      count: subscriptions.length,
+      limit: MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET,
+    });
+  } catch (error) {
+    console.error("[GET /api/group/[groupId]/digest-subscriptions]", error);
+    return NextResponse.json(
+      { error: "Failed to fetch group digest subscriptions" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ groupId: string }> },
+) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { groupId } = await context.params;
     const body = await request.json();
     const digestType = parseDigestType((body as { digestType?: unknown }).digestType);
     if (digestType instanceof NextResponse) return digestType;
@@ -66,37 +99,11 @@ export async function POST(request: NextRequest) {
     const pushTimes = parsePushTimes((body as { pushTimes?: unknown }).pushTimes);
     if (pushTimes instanceof NextResponse) return pushTimes;
 
-    const {
-      targetType = "USER",
-      targetId: rawTargetId,
-    } = body as {
-      targetType?: "USER" | "GROUP";
-      targetId?: string;
-    };
-
-    let targetId: string;
-    if (targetType === "USER") {
-      targetId = session.user.id;
-    } else if (targetType === "GROUP") {
-      if (!rawTargetId || typeof rawTargetId !== "string" || rawTargetId.trim() === "") {
-        return NextResponse.json(
-          { error: "targetId is required for GROUP digest subscriptions" },
-          { status: 400 },
-        );
-      }
-      targetId = rawTargetId.trim();
-    } else {
-      return NextResponse.json(
-        { error: "targetType must be USER or GROUP" },
-        { status: 400 },
-      );
-    }
-
     const existing = await prisma.digestSubscription.findUnique({
       where: {
         targetType_targetId_digestType: {
-          targetType,
-          targetId,
+          targetType: "GROUP",
+          targetId: groupId,
           digestType,
         },
       },
@@ -111,7 +118,7 @@ export async function POST(request: NextRequest) {
       }
 
       const currentCount = await prisma.digestSubscription.count({
-        where: { targetType, targetId, isActive: true },
+        where: { targetType: "GROUP", targetId: groupId, isActive: true },
       });
       if (currentCount >= MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET) {
         return NextResponse.json(
@@ -131,8 +138,8 @@ export async function POST(request: NextRequest) {
         }),
         prisma.digestPushLog.deleteMany({
           where: {
-            targetType,
-            targetId,
+            targetType: "GROUP",
+            targetId: groupId,
             digestType,
           },
         }),
@@ -142,7 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     const currentCount = await prisma.digestSubscription.count({
-      where: { targetType, targetId, isActive: true },
+      where: { targetType: "GROUP", targetId: groupId, isActive: true },
     });
     if (currentCount >= MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET) {
       return NextResponse.json(
@@ -153,8 +160,8 @@ export async function POST(request: NextRequest) {
 
     const subscription = await prisma.digestSubscription.create({
       data: {
-        targetType,
-        targetId,
+        targetType: "GROUP",
+        targetId: groupId,
         digestType,
         pushTimes,
         subscriberId: session.user.id,
@@ -163,9 +170,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(subscription);
   } catch (error) {
-    console.error("[POST /api/digest-subscriptions]", error);
+    console.error("[POST /api/group/[groupId]/digest-subscriptions]", error);
     return NextResponse.json(
-      { error: "Failed to create digest subscription" },
+      { error: "Failed to create group digest subscription" },
       { status: 500 },
     );
   }

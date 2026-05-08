@@ -1,22 +1,9 @@
 import type { Metadata } from "next";
-import { Noto_Serif_SC, Noto_Sans_SC } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
-
-const notoSerifSC = Noto_Serif_SC({
-  variable: "--font-noto-serif-sc",
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-});
-
-const notoSansSC = Noto_Sans_SC({
-  variable: "--font-noto-sans-sc",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
-});
 
 export const metadata: Metadata = {
   title: "知识推送 — 每日一题，温故知新",
@@ -30,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${notoSerifSC.variable} ${notoSansSC.variable} antialiased`}>
+      <body className="antialiased">
         <Providers>
           <div className="flex min-h-screen flex-col">
             <Header />

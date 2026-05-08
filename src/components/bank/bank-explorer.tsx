@@ -39,7 +39,6 @@ export function BankExplorer() {
 
   useEffect(() => {
     if (search === debouncedSearch) return;
-    setLoading(true);
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
@@ -69,7 +68,8 @@ export function BankExplorer() {
   }, [debouncedSearch, page]);
 
   useEffect(() => {
-    fetchBanks();
+    const timeout = setTimeout(fetchBanks, 0);
+    return () => clearTimeout(timeout);
   }, [fetchBanks]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {

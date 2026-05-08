@@ -171,8 +171,9 @@ export async function DELETE(
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
 
-    await prisma.subscription.delete({
+    await prisma.subscription.update({
       where: { id },
+      data: { isActive: false },
     });
 
     return NextResponse.json({ success: true });

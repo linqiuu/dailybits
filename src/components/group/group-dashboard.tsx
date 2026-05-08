@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
-import { Search, Clock, BookOpen, Users, CheckCircle } from "lucide-react";
+import { Search, Clock, BookOpen, Users, CheckCircle, Bell } from "lucide-react";
+import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
@@ -111,7 +112,6 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   /* --- banks --- */
   useEffect(() => {
     if (search === debouncedSearch) return;
-    setBanksLoading(true);
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search, debouncedSearch]);
@@ -141,11 +141,13 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   }, [debouncedSearch, page, groupId]);
 
   useEffect(() => {
-    fetchSubscriptions();
+    const timeout = setTimeout(fetchSubscriptions, 0);
+    return () => clearTimeout(timeout);
   }, [fetchSubscriptions]);
 
   useEffect(() => {
-    fetchBanks();
+    const timeout = setTimeout(fetchBanks, 0);
+    return () => clearTimeout(timeout);
   }, [fetchBanks]);
 
   const refreshAll = () => {
@@ -199,7 +201,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
       {/* tabs */}
       <Tabs defaultValue="banks">
-        <TabsList variant="line" className="w-full justify-start border-b border-border/60 pb-0">
+        <TabsList className="grid h-auto w-full grid-cols-3 p-1">
           <TabsTrigger value="banks" className="gap-1.5">
             <BookOpen className="size-3.5" />
             题库广场
@@ -212,6 +214,10 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                 {subCount}
               </Badge>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="digests" className="gap-1.5">
+            <Bell className="size-3.5" />
+            固定推送
           </TabsTrigger>
         </TabsList>
 
@@ -237,9 +243,18 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             subData={subData}
             subLoading={subLoading}
             groupId={groupId}
-            atLimit={atLimit}
             onUnsubscribe={handleUnsubscribe}
             onUpdate={refreshAll}
+          />
+        </TabsContent>
+
+        {/* ---------- tab: 固定推送 ---------- */}
+        <TabsContent value="digests" className="pt-4">
+          <DigestSubscriptionList
+            targetType="GROUP"
+            targetId={groupId}
+            title="群固定推送"
+            description="给这个群订阅 GitHub Trending、AI 新闻和 arXiv 论文摘要。"
           />
         </TabsContent>
       </Tabs>
@@ -577,14 +592,12 @@ function SubscriptionsTab({
   subData,
   subLoading,
   groupId,
-  atLimit,
   onUnsubscribe,
   onUpdate,
 }: {
   subData: GroupSubscriptionsResponse | null;
   subLoading: boolean;
   groupId: string;
-  atLimit: boolean;
   onUnsubscribe: (id: string) => void;
   onUpdate: () => void;
 }) {

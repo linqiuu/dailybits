@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import type { ComponentType } from "react";
@@ -17,13 +17,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { DigestType } from "@/types";
+import type { DigestType, TargetType } from "@/types";
 
 interface DigestSubscription {
   id: string;
   digestType: DigestType;
   pushTimes: string[];
   isActive: boolean;
+}
+
+interface DigestSubscriptionListProps {
+  targetType?: TargetType;
+  targetId?: string;
+  title?: string;
+  description?: string;
 }
 
 interface DigestOption {
@@ -62,7 +69,12 @@ function getTime(sub?: DigestSubscription, option?: DigestOption): string {
   return sub?.pushTimes[0] ?? option?.defaultTime ?? "09:00";
 }
 
-export function DigestSubscriptionList() {
+export function DigestSubscriptionList({
+  targetType = "USER",
+  targetId,
+  title = "每日摘要订阅",
+  description = "每种摘要每天只抓取一次，订阅用户按各自时间收到同一份缓存内容。",
+}: DigestSubscriptionListProps = {}) {
   const { status } = useSession();
   const [subscriptions, setSubscriptions] = useState<DigestSubscription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,36 +94,55 @@ export function DigestSubscriptionList() {
     return map;
   }, [subscriptions]);
 
-  const refresh = async () => {
-    const res = await fetch("/api/digest-subscriptions/mine");
+  const isGroupTarget = targetType === "GROUP";
+  const collectionEndpoint =
+    isGroupTarget && targetId
+      ? `/api/group/${targetId}/digest-subscriptions`
+      : "/api/digest-subscriptions/mine";
+  const createEndpoint =
+    isGroupTarget && targetId
+      ? `/api/group/${targetId}/digest-subscriptions`
+      : "/api/digest-subscriptions";
+  const itemEndpoint = (id: string) =>
+    isGroupTarget && targetId
+      ? `/api/group/${targetId}/digest-subscriptions/${id}`
+      : `/api/digest-subscriptions/${id}`;
+
+  const refresh = useCallback(async () => {
+    const res = await fetch(collectionEndpoint);
     const data = await res.json();
-    if (Array.isArray(data)) {
-      setSubscriptions(data);
+    const items = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.subscriptions)
+        ? data.subscriptions
+        : null;
+    if (items) {
+      setSubscriptions(items);
       setDraftTimes((prev) => {
         const next = { ...prev };
-        for (const sub of data as DigestSubscription[]) {
+        for (const sub of items as DigestSubscription[]) {
           next[sub.digestType] = sub.pushTimes[0] ?? next[sub.digestType];
         }
         return next;
       });
     }
-  };
+  }, [collectionEndpoint]);
 
   useEffect(() => {
     if (status === "loading") return;
-    if (status === "unauthenticated") {
+    if (targetType === "USER" && status === "unauthenticated") {
       setLoading(false);
       return;
     }
     refresh()
       .catch(() => toast.error("摘要订阅加载失败"))
       .finally(() => setLoading(false));
-  }, [status]);
+  }, [status, refresh, targetType]);
 
   const subscribe = async (option: DigestOption) => {
     setSavingType(option.type);
     try {
-      const res = await fetch("/api/digest-subscriptions", {
+      const res = await fetch(createEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -136,7 +167,7 @@ export function DigestSubscriptionList() {
   const updateTime = async (sub: DigestSubscription) => {
     setSavingType(sub.digestType);
     try {
-      const res = await fetch(`/api/digest-subscriptions/${sub.id}`, {
+      const res = await fetch(itemEndpoint(sub.id), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pushTimes: [draftTimes[sub.digestType]] }),
@@ -160,7 +191,7 @@ export function DigestSubscriptionList() {
     if (!confirm("确定取消这个每日摘要订阅吗？")) return;
     setSavingType(sub.digestType);
     try {
-      const res = await fetch(`/api/digest-subscriptions/${sub.id}`, {
+      const res = await fetch(itemEndpoint(sub.id), {
         method: "DELETE",
       });
       const data = await res.json();
@@ -180,7 +211,7 @@ export function DigestSubscriptionList() {
   if (loading) {
     return (
       <section className="space-y-4">
-        <h2 className="font-serif text-xl font-semibold">每日摘要订阅</h2>
+        <h2 className="font-serif text-xl font-semibold">{title}</h2>
         <div className="grid gap-3 md:grid-cols-3">
           {[1, 2, 3].map((item) => (
             <Card key={item} className="animate-pulse">
@@ -200,14 +231,14 @@ export function DigestSubscriptionList() {
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-serif text-xl font-semibold">每日摘要订阅</h2>
+          <h2 className="font-serif text-xl font-semibold">{title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            每种摘要每天只抓取一次，订阅用户按各自时间收到同一份缓存内容。
+            {description}
           </p>
         </div>
         <Badge variant="outline" className="gap-1">
           <Bell className="size-3" />
-          每类每日一次
+          每个时间点一次
         </Badge>
       </div>
 

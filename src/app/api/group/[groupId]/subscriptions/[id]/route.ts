@@ -92,7 +92,10 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.subscription.delete({ where: { id } });
+    await prisma.subscription.update({
+      where: { id },
+      data: { isActive: false },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

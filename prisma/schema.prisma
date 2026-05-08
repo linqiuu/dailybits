@@ -187,9 +187,10 @@ model DigestPushLog {
   targetId   String
   digestType DigestType
   digestDate String
+  pushTime   String     @default("09:00")
   pushedAt   DateTime   @default(now())
 
-  @@unique([targetType, targetId, digestType, digestDate])
+  @@unique([targetType, targetId, digestType, digestDate, pushTime])
   @@index([targetType, targetId])
   @@index([digestType, digestDate])
 }

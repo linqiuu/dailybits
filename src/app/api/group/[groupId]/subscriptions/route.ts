@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getSubscriptionReuseAction } from "@/lib/subscriptions/reuse";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
@@ -196,10 +197,52 @@ export async function POST(
       },
     });
     if (existing) {
-      return NextResponse.json(
-        { error: "Already subscribed to this bank" },
-        { status: 409 }
-      );
+      const reuse = getSubscriptionReuseAction(existing);
+      if (reuse.action === "conflict") {
+        return NextResponse.json(
+          { error: "Already subscribed to this bank" },
+          { status: 409 }
+        );
+      }
+
+      const currentCount = await prisma.subscription.count({
+        where: { targetType: "GROUP", targetId: groupId, isActive: true },
+      });
+      if (currentCount >= MAX_SUBSCRIPTIONS_PER_TARGET) {
+        return NextResponse.json(
+          { error: `Subscription limit reached (${MAX_SUBSCRIPTIONS_PER_TARGET})` },
+          { status: 400 }
+        );
+      }
+
+      const [subscription] = await prisma.$transaction([
+        prisma.subscription.update({
+          where: { id: existing.id },
+          data: {
+            isActive: true,
+            pushTimes: validTimes,
+            endCondition,
+            repeatCount,
+            currentCycle: 0,
+            subscriberId: session.user.id,
+          },
+          include: {
+            bank: { select: { id: true, title: true } },
+            subscriber: {
+              select: { id: true, name: true, uid: true },
+            },
+          },
+        }),
+        prisma.pushLog.deleteMany({
+          where: {
+            targetType: "GROUP",
+            targetId: groupId,
+            question: { bankId: bank.id },
+          },
+        }),
+      ]);
+
+      return NextResponse.json(subscription);
     }
 
     const currentCount = await prisma.subscription.count({

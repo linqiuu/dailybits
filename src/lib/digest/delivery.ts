@@ -42,6 +42,18 @@ export async function pushDigestToTarget(payload: DigestPushPayload): Promise<bo
   return response.ok;
 }
 
+export function buildDigestPushLogKey(input: {
+  targetType: TargetType;
+  targetId: string;
+  digestType: DigestType;
+  digestDate: string;
+  pushTime: string;
+}) {
+  return {
+    targetType_targetId_digestType_digestDate_pushTime: input,
+  };
+}
+
 function getDigestTitle(type: DigestType): string {
   if (type === "GITHUB_TRENDING") return "GitHub Trending Daily";
   if (type === "AI_NEWS") return "AI News Daily";
@@ -117,14 +129,13 @@ export async function runDueDigestSubscriptions(
   for (const sub of subscriptions) {
     try {
       const alreadyPushed = await prisma.digestPushLog.findUnique({
-        where: {
-          targetType_targetId_digestType_digestDate: {
-            targetType: sub.targetType,
-            targetId: sub.targetId,
-            digestType: sub.digestType,
-            digestDate,
-          },
-        },
+        where: buildDigestPushLogKey({
+          targetType: sub.targetType as TargetType,
+          targetId: sub.targetId,
+          digestType: sub.digestType as DigestType,
+          digestDate,
+          pushTime: currentTime,
+        }),
       });
       if (alreadyPushed) continue;
 
@@ -161,6 +172,7 @@ export async function runDueDigestSubscriptions(
             targetId: sub.targetId,
             digestType: sub.digestType,
             digestDate,
+            pushTime: currentTime,
           },
         });
         console.log(`[Digest] Pushed ${digestType} to ${sub.targetType}:${sub.targetId}`);

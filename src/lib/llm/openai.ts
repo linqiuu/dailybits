@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { LLMProvider } from "./provider";
 import type { GeneratedQuestion } from "@/types";
 import { SYSTEM_PROMPT, buildUserPrompt } from "./prompts";
+import { getLlmTimeoutMs } from "./config";
 
 function parseJsonResponse(raw: string): GeneratedQuestion[] {
   let text = raw.trim();
@@ -50,6 +51,7 @@ export class OpenAIProvider implements LLMProvider {
     this.client = new OpenAI({
       apiKey,
       baseURL: config?.baseURL ?? process.env.LLM_API_BASE_URL ?? undefined,
+      timeout: getLlmTimeoutMs(),
     });
     this.model = config?.model ?? process.env.LLM_MODEL ?? "gpt-4o-mini";
   }

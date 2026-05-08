@@ -28,7 +28,7 @@ function parseVisibilityBody(body: {
     visibility = body.visibility as VisibilityValue;
   }
 
-  let visibleDepartments: string[] = [];
+  const visibleDepartments: string[] = [];
   if (body.visibleDepartments !== undefined) {
     if (!Array.isArray(body.visibleDepartments)) {
       return NextResponse.json(
