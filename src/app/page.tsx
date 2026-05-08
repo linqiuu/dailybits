@@ -35,11 +35,11 @@ export default function Home() {
         </div>
       ) : null}
       <Tabs defaultValue="banks" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 p-1 sm:w-72">
-          <TabsTrigger value="banks" className="min-h-9 px-3">
+        <TabsList className="grid h-10 w-full max-w-xs grid-cols-2 gap-1 p-1">
+          <TabsTrigger value="banks" className="h-8 min-w-0 px-3">
             题库
           </TabsTrigger>
-          <TabsTrigger value="digests" className="min-h-9 px-3">
+          <TabsTrigger value="digests" className="h-8 min-w-0 px-3">
             固定推送
           </TabsTrigger>
         </TabsList>

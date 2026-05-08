@@ -201,12 +201,12 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
       {/* tabs */}
       <Tabs defaultValue="banks">
-        <TabsList className="grid h-auto w-full grid-cols-3 p-1">
-          <TabsTrigger value="banks" className="gap-1.5">
+        <TabsList className="grid h-10 w-full grid-cols-3 gap-1 p-1">
+          <TabsTrigger value="banks" className="h-8 min-w-0 gap-1.5 px-2">
             <BookOpen className="size-3.5" />
             题库广场
           </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="gap-1.5">
+          <TabsTrigger value="subscriptions" className="h-8 min-w-0 gap-1.5 px-2">
             <CheckCircle className="size-3.5" />
             已订阅
             {subCount > 0 && (
@@ -215,7 +215,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="digests" className="gap-1.5">
+          <TabsTrigger value="digests" className="h-8 min-w-0 gap-1.5 px-2">
             <Bell className="size-3.5" />
             固定推送
           </TabsTrigger>
@@ -443,7 +443,9 @@ function GroupBankCard({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <Link href={`/bank/${bank.id}`} className="min-w-0 hover:underline">
-            <CardTitle className="font-serif text-base">{bank.title}</CardTitle>
+            <CardTitle className="truncate font-serif text-base" title={bank.title}>
+              {bank.title}
+            </CardTitle>
           </Link>
           {isSubscribed && (
             <Badge className="shrink-0 border-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">

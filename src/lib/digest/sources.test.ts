@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildGithubReadmeSummaryText,
+  getGithubReadmeSummaryInstruction,
   getGithubReadmeSummaryMaxChars,
 } from "./sources";
 
@@ -35,4 +36,12 @@ test("GitHub README summary input trims long README content before calling the L
   assert.equal(input.includes("SHOULD_NOT_BE_SENT"), false);
   assert.equal(input.includes("Project: owner/repo"), true);
   assert.equal(input.includes("Language: TypeScript"), true);
+});
+
+test("GitHub README summary prompt requires Chinese 3 to 5 sentence output", () => {
+  const instruction = getGithubReadmeSummaryInstruction();
+
+  assert.match(instruction, /中文|简体中文/);
+  assert.match(instruction, /3\s*到\s*5\s*句/);
+  assert.match(instruction, /不要输出 Markdown/);
 });

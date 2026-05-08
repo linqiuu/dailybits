@@ -153,6 +153,14 @@ export function buildGithubReadmeSummaryText(
     .join("\n");
 }
 
+export function getGithubReadmeSummaryInstruction(): string {
+  return [
+    "请基于这个 GitHub 项目的 README，用简体中文写 3 到 5 句总结。",
+    "必须说明：它解决什么问题、核心能力是什么、适合谁关注或使用。",
+    "不要逐字翻译 README，不要添加原文没有的信息，不要输出英文摘要，不要输出 Markdown，不要输出标题。",
+  ].join("\n");
+}
+
 function formatDisplayDate(value?: string): string | undefined {
   if (!value) return undefined;
   const date = new Date(value);
@@ -359,7 +367,7 @@ async function fetchGithubReadme(repo: GithubRepo): Promise<string | undefined> 
 async function summarizeGithubReadme(repo: GithubRepo, readme: string): Promise<string | undefined> {
   return rewriteWithDigestAi(
     buildGithubReadmeSummaryText(repo, readme),
-    "请基于这个 GitHub 项目的 README，用 80-120 个中文字符总结：它解决什么问题、核心能力、适合谁关注。",
+    getGithubReadmeSummaryInstruction(),
     getGithubReadmeSummaryMaxChars() + 500,
   );
 }

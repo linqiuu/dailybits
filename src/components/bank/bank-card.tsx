@@ -119,9 +119,11 @@ export function BankCard({
       className="paper-rise card-hover flex flex-col"
       style={{ animationDelay: `${appearDelayMs}ms` }}
     >
-      <CardHeader className="pb-2">
-        <Link href={`/bank/${id}`} className="hover:underline">
-          <CardTitle className="font-serif text-lg">{title}</CardTitle>
+      <CardHeader className="min-w-0 pb-2">
+        <Link href={`/bank/${id}`} className="block min-w-0 hover:underline">
+          <CardTitle className="truncate font-serif text-lg" title={title}>
+            {title}
+          </CardTitle>
         </Link>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-3">
