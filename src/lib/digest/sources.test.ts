@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildGithubReadmeSummaryText,
+  getAiNewsDigestCacheDate,
   getGithubReadmeSummaryInstruction,
   getGithubReadmeSummaryMaxChars,
 } from "./sources";
@@ -44,4 +45,40 @@ test("GitHub README summary prompt requires Chinese 3 to 5 sentence output", () 
   assert.match(instruction, /中文|简体中文/);
   assert.match(instruction, /3\s*到\s*5\s*句/);
   assert.match(instruction, /不要输出 Markdown/);
+});
+
+test("AIHOT daily cache date waits until the daily report is ready", () => {
+  const originalProvider = process.env.AI_NEWS_PROVIDER;
+  const originalMode = process.env.AIHOT_DIGEST_MODE;
+  const originalReadyTime = process.env.AIHOT_DAILY_READY_TIME;
+  process.env.AI_NEWS_PROVIDER = "aihot";
+  process.env.AIHOT_DIGEST_MODE = "daily";
+  process.env.AIHOT_DAILY_READY_TIME = "08:10";
+
+  try {
+    assert.equal(
+      getAiNewsDigestCacheDate(new Date("2026-05-08T00:09:00.000Z"), "Asia/Shanghai"),
+      "2026-05-07",
+    );
+    assert.equal(
+      getAiNewsDigestCacheDate(new Date("2026-05-08T00:10:00.000Z"), "Asia/Shanghai"),
+      "2026-05-08",
+    );
+  } finally {
+    if (originalProvider === undefined) {
+      delete process.env.AI_NEWS_PROVIDER;
+    } else {
+      process.env.AI_NEWS_PROVIDER = originalProvider;
+    }
+    if (originalMode === undefined) {
+      delete process.env.AIHOT_DIGEST_MODE;
+    } else {
+      process.env.AIHOT_DIGEST_MODE = originalMode;
+    }
+    if (originalReadyTime === undefined) {
+      delete process.env.AIHOT_DAILY_READY_TIME;
+    } else {
+      process.env.AIHOT_DAILY_READY_TIME = originalReadyTime;
+    }
+  }
 });

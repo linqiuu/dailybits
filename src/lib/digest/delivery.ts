@@ -1,6 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import type { DigestPushPayload, DigestType, TargetType } from "../../types";
-import { fetchDigestItems } from "./sources";
+import { fetchDigestItems, getAiNewsDigestCacheDate } from "./sources";
 
 export function getDigestDate(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -91,7 +91,11 @@ async function getDigestItemsForDate(
   const cachedItems = parseCachedItems(cached?.items);
   if (cachedItems) return cachedItems;
 
-  const items = await fetchDigestItems(digestType, Number(process.env.DIGEST_ITEM_LIMIT ?? 10));
+  const items = await fetchDigestItems(
+    digestType,
+    Number(process.env.DIGEST_ITEM_LIMIT ?? 10),
+    { digestDate },
+  );
   await prisma.digestCache.upsert({
     where: {
       digestType_digestDate: {
@@ -117,7 +121,8 @@ export async function runDueDigestSubscriptions(
   currentTime: string,
   timezone: string,
 ): Promise<void> {
-  const digestDate = getDigestDate(new Date(), timezone);
+  const now = new Date();
+  const scheduleDate = getDigestDate(now, timezone);
   const subscriptions = await prisma.digestSubscription.findMany({
     where: {
       isActive: true,
@@ -125,28 +130,33 @@ export async function runDueDigestSubscriptions(
     },
   });
 
-  const itemCache = new Map<DigestType, Promise<string[]>>();
+  const itemCache = new Map<string, Promise<string[]>>();
   for (const sub of subscriptions) {
     try {
+      const digestType = sub.digestType as DigestType;
+      const contentDate =
+        digestType === "AI_NEWS"
+          ? getAiNewsDigestCacheDate(now, timezone)
+          : scheduleDate;
       const alreadyPushed = await prisma.digestPushLog.findUnique({
         where: buildDigestPushLogKey({
           targetType: sub.targetType as TargetType,
           targetId: sub.targetId,
-          digestType: sub.digestType as DigestType,
-          digestDate,
+          digestType,
+          digestDate: scheduleDate,
           pushTime: currentTime,
         }),
       });
       if (alreadyPushed) continue;
 
-      const digestType = sub.digestType as DigestType;
-      if (!itemCache.has(digestType)) {
+      const cacheKey = `${digestType}:${contentDate}`;
+      if (!itemCache.has(cacheKey)) {
         itemCache.set(
-          digestType,
-          getDigestItemsForDate(prisma, digestType, digestDate),
+          cacheKey,
+          getDigestItemsForDate(prisma, digestType, contentDate),
         );
       }
-      const items = await itemCache.get(digestType)!;
+      const items = await itemCache.get(cacheKey)!;
       if (items.length === 0) {
         console.warn(`[Digest] No items for ${digestType}`);
         continue;
@@ -162,7 +172,7 @@ export async function runDueDigestSubscriptions(
         title: getDigestTitle(digestType),
         items,
         digestType,
-        digestDate,
+        digestDate: contentDate,
       });
 
       if (success) {
@@ -171,7 +181,7 @@ export async function runDueDigestSubscriptions(
             targetType: sub.targetType,
             targetId: sub.targetId,
             digestType: sub.digestType,
-            digestDate,
+            digestDate: scheduleDate,
             pushTime: currentTime,
           },
         });

@@ -50,11 +50,45 @@ interface ArxivPaper {
   primaryCategory: string | undefined;
 }
 
+interface AihotDailyItem {
+  title?: string;
+  summary?: string;
+  sourceUrl?: string;
+  sourceName?: string;
+}
+
+interface AihotDailySection {
+  label?: string;
+  items?: AihotDailyItem[];
+}
+
+interface AihotDailyResponse {
+  date?: string;
+  sections?: AihotDailySection[];
+}
+
+interface AihotSelectedItem {
+  title?: string;
+  url?: string;
+  source?: string;
+  publishedAt?: string;
+  summary?: string;
+  category?: string;
+}
+
+interface AihotSelectedResponse {
+  items?: AihotSelectedItem[];
+}
+
 const DEFAULT_AI_NEWS_FEEDS = [
   "https://openai.com/news/rss.xml",
   "https://news.mit.edu/rss/topic/artificial-intelligence2",
 ];
 const DEFAULT_ARXIV_AI_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "stat.ML"];
+const DEFAULT_AIHOT_API_BASE_URL = "https://aihot.virxact.com";
+const DEFAULT_AIHOT_DAILY_READY_TIME = "08:10";
+const DEFAULT_AIHOT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36";
 const DEFAULT_README_SUMMARY_MAX_CHARS = 5000;
 const DEFAULT_README_SUMMARY_CONCURRENCY = 2;
 const DEFAULT_DIGEST_AI_CONCURRENCY = 3;
@@ -170,6 +204,16 @@ function formatDisplayDate(value?: string): string | undefined {
   return value.slice(0, 10);
 }
 
+function getAihotApiBaseUrl(): string {
+  return (process.env.AIHOT_API_BASE_URL ?? DEFAULT_AIHOT_API_BASE_URL).replace(/\/+$/, "");
+}
+
+function getAihotHeaders(): Record<string, string> {
+  return {
+    "User-Agent": process.env.AIHOT_USER_AGENT ?? DEFAULT_AIHOT_USER_AGENT,
+  };
+}
+
 function parseGithubTrending(html: string, limit: number): GithubRepo[] {
   const articles = html.match(/<article[\s\S]*?<\/article>/g) ?? [];
   const repos: GithubRepo[] = [];
@@ -223,6 +267,48 @@ function getDateInTimezone(date: Date, timezone: string): string {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function getMinutesInTimezone(date: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return Number(values.hour) * 60 + Number(values.minute);
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function isAihotAiNewsEnabled(): boolean {
+  return (process.env.AI_NEWS_PROVIDER ?? "aihot").toLowerCase() === "aihot";
+}
+
+function getAihotDigestMode(): "daily" | "selected" {
+  return (process.env.AIHOT_DIGEST_MODE ?? "daily").toLowerCase() === "selected"
+    ? "selected"
+    : "daily";
+}
+
+export function getAiNewsDigestCacheDate(date: Date, timezone: string): string {
+  const today = getDateInTimezone(date, timezone);
+  if (!isAihotAiNewsEnabled() || getAihotDigestMode() !== "daily") return today;
+
+  const readyAt = parseTimeToMinutes(process.env.AIHOT_DAILY_READY_TIME ?? DEFAULT_AIHOT_DAILY_READY_TIME);
+  if (readyAt === null) return today;
+
+  return getMinutesInTimezone(date, timezone) >= readyAt
+    ? today
+    : getDateInTimezone(new Date(date.getTime() - 24 * 60 * 60 * 1000), timezone);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -262,6 +348,15 @@ async function fetchText(
   }
 
   throw lastError instanceof Error ? lastError : new Error(`GET ${url} failed`);
+}
+
+async function fetchJson<T>(url: string, headers?: HeadersInit): Promise<T> {
+  return JSON.parse(
+    await fetchText(url, {
+      Accept: "application/json",
+      ...headers,
+    }),
+  ) as T;
 }
 
 function getDigestSummaryClient(): OpenAI | null {
@@ -481,6 +576,73 @@ function parseRssItems(xml: string, source: string): DigestItem[] {
   });
 }
 
+function pickAihotDailyItems(daily: AihotDailyResponse, limit: number): DigestItem[] {
+  const sections = (daily.sections ?? [])
+    .map((section) => ({
+      label: section.label ?? "AI HOT",
+      items: section.items ?? [],
+    }))
+    .filter((section) => section.items.length > 0);
+  const picked: DigestItem[] = [];
+
+  for (let index = 0; picked.length < limit; index += 1) {
+    let added = false;
+    for (const section of sections) {
+      const item = section.items[index];
+      if (!item) continue;
+      picked.push({
+        title: item.title ?? "Untitled",
+        url: item.sourceUrl,
+        source: item.sourceName ?? "AI HOT",
+        summary: item.summary || "No summary provided.",
+        meta: [`日报: ${daily.date ?? ""}`, `分类: ${section.label}`]
+          .filter((value) => !value.endsWith(": "))
+          .join(" | "),
+      });
+      added = true;
+      if (picked.length >= limit) break;
+    }
+    if (!added) break;
+  }
+
+  return picked;
+}
+
+async function fetchAihotDailyDigest(limit: number, digestDate?: string): Promise<string[]> {
+  const baseUrl = getAihotApiBaseUrl();
+  const path = digestDate
+    ? `/api/public/daily/${encodeURIComponent(digestDate)}`
+    : "/api/public/daily";
+  const daily = await fetchJson<AihotDailyResponse>(`${baseUrl}${path}`, getAihotHeaders());
+  return pickAihotDailyItems(daily, limit).map(formatDigestItem);
+}
+
+async function fetchAihotSelectedDigest(limit: number): Promise<string[]> {
+  const baseUrl = getAihotApiBaseUrl();
+  const url = new URL(`${baseUrl}/api/public/items`);
+  url.searchParams.set("mode", "selected");
+  url.searchParams.set("take", String(limit));
+
+  const response = await fetchJson<AihotSelectedResponse>(url.toString(), getAihotHeaders());
+  return (response.items ?? [])
+    .slice(0, limit)
+    .map((item) => ({
+      title: item.title ?? "Untitled",
+      url: item.url,
+      source: item.source ?? "AI HOT",
+      summary: item.summary || "No summary provided.",
+      meta: item.publishedAt ? `published: ${item.publishedAt}` : item.category ? `分类: ${item.category}` : undefined,
+    }))
+    .map(formatDigestItem);
+}
+
+async function fetchAihotDigest(limit: number, digestDate?: string): Promise<string[]> {
+  if (getAihotDigestMode() === "selected") {
+    return fetchAihotSelectedDigest(limit);
+  }
+  return fetchAihotDailyDigest(limit, digestDate);
+}
+
 function hostnameFromUrl(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -546,7 +708,19 @@ async function translateAiNewsItems(items: DigestItem[]): Promise<DigestItem[]> 
   });
 }
 
-export async function fetchAiNewsDigest(limit = 10): Promise<string[]> {
+export async function fetchAiNewsDigest(
+  limit = 10,
+  options: { digestDate?: string } = {},
+): Promise<string[]> {
+  if (isAihotAiNewsEnabled()) {
+    try {
+      const items = await fetchAihotDigest(limit, options.digestDate);
+      if (items.length > 0) return items;
+    } catch (error) {
+      console.warn("[Digest] AIHOT fetch failed, falling back to RSS/HN", error);
+    }
+  }
+
   const [rssItems, hnItems] = await Promise.all([
     fetchAiNewsFromRss(Math.ceil(limit * 0.7)),
     fetchAiNewsFromHackerNews(Math.floor(limit * 0.3)),
@@ -662,12 +836,16 @@ export async function fetchArxivAiPapersDigest(limit = 10): Promise<string[]> {
   return translatedPapers.map(formatArxivPaper);
 }
 
-export async function fetchDigestItems(type: DigestType, limit = 10): Promise<string[]> {
+export async function fetchDigestItems(
+  type: DigestType,
+  limit = 10,
+  options: { digestDate?: string } = {},
+): Promise<string[]> {
   if (type === "GITHUB_TRENDING") {
     return fetchGithubTrendingDigest(limit);
   }
   if (type === "AI_NEWS") {
-    return fetchAiNewsDigest(limit);
+    return fetchAiNewsDigest(limit, options);
   }
   if (type === "ARXIV_AI_PAPERS") {
     return fetchArxivAiPapersDigest(limit);

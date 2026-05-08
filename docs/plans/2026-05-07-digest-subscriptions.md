@@ -7,7 +7,7 @@ This adds separate daily digest subscriptions next to the existing question-bank
 Supported digest types:
 
 - `GITHUB_TRENDING`: fetches `github.com/trending?since=daily`, parses the public Trending page, and falls back to GitHub Search API when scraping fails.
-- `AI_NEWS`: fetches curated RSS feeds plus high-signal Hacker News search results.
+- `AI_NEWS`: fetches AIHOT daily by default, with the legacy curated RSS + Hacker News path as fallback.
 - `ARXIV_AI_PAPERS`: fetches the arXiv API sorted by latest submitted date for AI-related categories.
 
 Each push payload uses a string list. Each string is Markdown and can be rendered independently:
@@ -108,6 +108,11 @@ GITHUB_TRENDING_SEARCH_QUERY=""
 GITHUB_README_SUMMARY_MAX_CHARS="12000"
 GITHUB_README_SUMMARY_CONCURRENCY="2"
 DIGEST_AI_CONCURRENCY="3"
+AI_NEWS_PROVIDER="aihot"
+AIHOT_API_BASE_URL="https://aihot.virxact.com"
+AIHOT_DIGEST_MODE="daily"
+AIHOT_DAILY_READY_TIME="08:10"
+AIHOT_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 AI_NEWS_TRANSLATION_MAX_CHARS="1800"
 ARXIV_TRANSLATION_MAX_CHARS="3500"
 AI_NEWS_RSS_FEEDS="https://openai.com/news/rss.xml,https://news.mit.edu/rss/topic/artificial-intelligence2"
@@ -118,7 +123,9 @@ ARXIV_AI_SEARCH_QUERY=""
 
 `GITHUB_TOKEN` is optional but recommended in production to increase GitHub API rate limits for the fallback path and README fetches. GitHub Trending items fetch each repo README and use the configured LLM (`LLM_API_KEY`, `LLM_API_BASE_URL`, `LLM_MODEL`) to generate a concise summary.
 
-`AI_NEWS_RSS_FEEDS` is comma-separated. Prefer official or editorial RSS feeds. Good defaults are OpenAI News and MIT News Artificial Intelligence; Hacker News is added as a supplemental API source for timely community signals. News summaries are translated into Chinese with the configured LLM before pushing.
+`AI_NEWS_PROVIDER=aihot` uses AIHOT's public API as the primary source. `AIHOT_DIGEST_MODE=daily` fetches the fixed daily report and caches it by content date, which keeps later user pushes on the same day consistent. `AIHOT_DAILY_READY_TIME` prevents early-morning pushes from caching yesterday's latest report as today's content. Set `AIHOT_DIGEST_MODE=selected` to use AIHOT's rolling selected feed instead.
+
+`AI_NEWS_RSS_FEEDS` is comma-separated and only used when AIHOT is disabled or unavailable. Prefer official or editorial RSS feeds. Good defaults are OpenAI News and MIT News Artificial Intelligence; Hacker News is added as a supplemental API source for timely community signals. Legacy RSS/HN summaries are translated into Chinese with the configured LLM before pushing.
 
 `ARXIV_AI_CATEGORIES` is comma-separated. `ARXIV_AI_SEARCH_QUERY` can override it with a raw arXiv query, for example `cat:cs.AI OR cat:cs.LG`. Paper titles stay in the original language, while abstracts are translated and compressed into Chinese with the configured LLM.
 
