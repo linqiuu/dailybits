@@ -1,6 +1,6 @@
-import type { PrismaClient } from "../../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { DigestPushPayload, DigestType, TargetType } from "../../types";
-import { fetchDigestItems, getAiNewsDigestCacheDate } from "./sources";
+import { fetchDigestItems, getAiNewsDigestCacheDate, getDigestItemLimit } from "./sources";
 
 export function getDigestDate(date: Date, timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -61,21 +61,83 @@ function getDigestTitle(type: DigestType): string {
   return "Daily Digest";
 }
 
+const DIGEST_FETCH_FAILURE_KIND = "digest-fetch-failure";
+const DEFAULT_DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES = 180;
+
+interface DigestFetchFailureCache {
+  kind: typeof DIGEST_FETCH_FAILURE_KIND;
+  message: string;
+  failedAt: string;
+  retryAfter: string;
+}
+
+export function getDigestFetchFailureCooldownMs(): number {
+  const minutes = Number(
+    process.env.DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES ??
+      DEFAULT_DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES,
+  );
+  const normalized = Number.isFinite(minutes) && minutes > 0
+    ? minutes
+    : DEFAULT_DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES;
+  return normalized * 60 * 1000;
+}
+
+export function buildDigestFetchFailureCache(
+  message: string,
+  now = new Date(),
+  cooldownMs = getDigestFetchFailureCooldownMs(),
+): DigestFetchFailureCache {
+  return {
+    kind: DIGEST_FETCH_FAILURE_KIND,
+    message,
+    failedAt: now.toISOString(),
+    retryAfter: new Date(now.getTime() + cooldownMs).toISOString(),
+  };
+}
+
+function parseDigestFetchFailureCache(value: unknown): DigestFetchFailureCache | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (record.kind !== DIGEST_FETCH_FAILURE_KIND) return null;
+  if (
+    typeof record.message !== "string" ||
+    typeof record.failedAt !== "string" ||
+    typeof record.retryAfter !== "string"
+  ) {
+    return null;
+  }
+  return {
+    kind: DIGEST_FETCH_FAILURE_KIND,
+    message: record.message,
+    failedAt: record.failedAt,
+    retryAfter: record.retryAfter,
+  };
+}
+
+export function isActiveDigestFetchFailureCache(
+  value: unknown,
+  now = new Date(),
+): boolean {
+  const failure = parseDigestFetchFailureCache(value);
+  if (!failure) return false;
+  const retryAfterMs = new Date(failure.retryAfter).getTime();
+  return Number.isFinite(retryAfterMs) && retryAfterMs > now.getTime();
+}
+
 function parseCachedItems(items: unknown): string[] | null {
   if (!Array.isArray(items)) return null;
   const normalized = items.filter((item): item is string => typeof item === "string");
   if (normalized.length !== items.length) return null;
-  return normalized.every((item) => {
-    const value = item.trim();
-    return (
-      value.startsWith("📦 ") ||
-      value.startsWith("📰 ") ||
-      value.startsWith("📄 ")
-    );
-  }) ? normalized : null;
+  return normalized.length > 0 &&
+    normalized.every((item) => {
+      const value = item.trim();
+      return value.startsWith("### ") && value.includes("\n| ") && value.includes("\n| ---");
+    })
+    ? normalized
+    : null;
 }
 
-async function getDigestItemsForDate(
+export async function getDigestItemsForDate(
   prisma: PrismaClient,
   digestType: DigestType,
   digestDate: string,
@@ -90,30 +152,63 @@ async function getDigestItemsForDate(
   });
   const cachedItems = parseCachedItems(cached?.items);
   if (cachedItems) return cachedItems;
+  if (isActiveDigestFetchFailureCache(cached?.items)) {
+    const failure = parseDigestFetchFailureCache(cached?.items);
+    console.warn(
+      `[Digest] Skip ${digestType} fetch until ${failure?.retryAfter}: ${failure?.message}`,
+    );
+    return [];
+  }
 
-  const items = await fetchDigestItems(
-    digestType,
-    Number(process.env.DIGEST_ITEM_LIMIT ?? 10),
-    { digestDate },
-  );
-  await prisma.digestCache.upsert({
-    where: {
-      digestType_digestDate: {
+  try {
+    const items = await fetchDigestItems(
+      digestType,
+      getDigestItemLimit(),
+      { digestDate },
+    );
+    await prisma.digestCache.upsert({
+      where: {
+        digestType_digestDate: {
+          digestType,
+          digestDate,
+        },
+      },
+      update: {
+        items,
+        fetchedAt: new Date(),
+      },
+      create: {
         digestType,
         digestDate,
+        items,
       },
-    },
-    update: {
-      items,
-      fetchedAt: new Date(),
-    },
-    create: {
-      digestType,
-      digestDate,
-      items,
-    },
-  });
-  return items;
+    });
+    return items;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failureCache = JSON.parse(
+      JSON.stringify(buildDigestFetchFailureCache(message)),
+    ) as Prisma.InputJsonValue;
+    await prisma.digestCache.upsert({
+      where: {
+        digestType_digestDate: {
+          digestType,
+          digestDate,
+        },
+      },
+      update: {
+        items: failureCache,
+        fetchedAt: new Date(),
+      },
+      create: {
+        digestType,
+        digestDate,
+        items: failureCache,
+      },
+    });
+    console.warn(`[Digest] Cached ${digestType} fetch failure for ${digestDate}: ${message}`);
+    return [];
+  }
 }
 
 export async function runDueDigestSubscriptions(

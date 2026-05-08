@@ -101,7 +101,8 @@ Content-Type: application/json
 ## Environment
 
 ```env
-DIGEST_ITEM_LIMIT="10"
+DIGEST_ITEM_LIMIT="12"
+DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES="180"
 GITHUB_TOKEN=""
 GITHUB_TRENDING_LANGUAGE=""
 GITHUB_TRENDING_SEARCH_QUERY=""
@@ -119,9 +120,15 @@ AI_NEWS_RSS_FEEDS="https://openai.com/news/rss.xml,https://news.mit.edu/rss/topi
 AI_NEWS_HN_QUERY="artificial intelligence"
 ARXIV_AI_CATEGORIES="cs.AI,cs.LG,cs.CL,cs.CV,stat.ML"
 ARXIV_AI_SEARCH_QUERY=""
+ARXIV_FETCH_ATTEMPTS="2"
+ARXIV_RETRY_BASE_MS="15000"
 ```
 
 `GITHUB_TOKEN` is optional but recommended in production to increase GitHub API rate limits for the fallback path and README fetches. GitHub Trending items fetch each repo README and use the configured LLM (`LLM_API_KEY`, `LLM_API_BASE_URL`, `LLM_MODEL`) to generate a concise summary.
+
+Daily digest payloads are sent as three Markdown overview table strings by default. Each table contains up to four rows, so `DIGEST_ITEM_LIMIT="12"` gives users twelve source items without appending the older long-form detail items. GitHub tables show project, language, stars/today growth, and one-line summary; AI news tables show title, source, and one-line summary; arXiv tables show paper, publish date, and one-line summary.
+
+Fetch failures are also cached for a short cooldown window. `DIGEST_FETCH_FAILURE_COOLDOWN_MINUTES="180"` prevents later user push times from repeatedly calling the same failing upstream source. This is especially useful for arXiv rate limits. arXiv uses fewer retries by default (`ARXIV_FETCH_ATTEMPTS="2"`), and HTTP 429 responses are not retried immediately.
 
 `AI_NEWS_PROVIDER=aihot` uses AIHOT's public API as the primary source. `AIHOT_DIGEST_MODE=daily` fetches the fixed daily report and caches it by content date, which keeps later user pushes on the same day consistent. `AIHOT_DAILY_READY_TIME` prevents early-morning pushes from caching yesterday's latest report as today's content. Set `AIHOT_DIGEST_MODE=selected` to use AIHOT's rolling selected feed instead.
 
@@ -149,6 +156,7 @@ Scheduler behavior:
 - Every minute, find active digest subscriptions whose single `pushTimes[0]` matches the current `HH:MM`.
 - For each digest type, read today's `DigestCache` first.
 - If there is no cache row, fetch the external source once, store `items: string[]`, then push.
-- If the cache row still contains the old non-Markdown digest format, refresh it before pushing.
+- If the cache row still contains the old non-overview digest format, refresh it before pushing.
+- If the fetch fails, store a short-lived failure marker in `DigestCache`; later pushes during the cooldown skip external fetching instead of repeatedly hitting the upstream API.
 - If there is already a cache row, push the cached `items` without calling the external source again.
-- Pushes are processed sequentially in the current scheduler process. Each successful target gets a `DigestPushLog` row keyed by `targetType + targetId + digestType + digestDate`, so a target will not receive the same digest twice on the same date.
+- Pushes are processed sequentially in the current scheduler process. Each successful target gets a `DigestPushLog` row keyed by `targetType + targetId + digestType + digestDate + pushTime`, so a target will not receive the same digest twice at the same subscribed time on the same date.

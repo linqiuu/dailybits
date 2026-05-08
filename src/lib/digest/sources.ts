@@ -92,6 +92,13 @@ const DEFAULT_AIHOT_USER_AGENT =
 const DEFAULT_README_SUMMARY_MAX_CHARS = 5000;
 const DEFAULT_README_SUMMARY_CONCURRENCY = 2;
 const DEFAULT_DIGEST_AI_CONCURRENCY = 3;
+const DEFAULT_DIGEST_ITEM_LIMIT = 12;
+const DIGEST_OVERVIEW_PAGE_SIZE = 4;
+const DIGEST_OVERVIEW_PAGE_COUNT = 3;
+const DIGEST_OVERVIEW_ITEM_LIMIT =
+  DIGEST_OVERVIEW_PAGE_SIZE * DIGEST_OVERVIEW_PAGE_COUNT;
+const DEFAULT_ARXIV_FETCH_ATTEMPTS = 2;
+const DEFAULT_ARXIV_RETRY_BASE_MS = 15000;
 const DEFAULT_NEWS_TRANSLATION_MAX_CHARS = 1800;
 const DEFAULT_ARXIV_TRANSLATION_MAX_CHARS = 3500;
 
@@ -125,45 +132,101 @@ function markdownLink(label: string, url?: string): string {
   return url ? `[${label}](${url})` : label;
 }
 
-function formatRepo(repo: GithubRepo): string {
-  const stars = repo.totalStars
-    ? `⭐ ${repo.totalStars}${repo.starsToday ? ` (🚀今日 +${repo.starsToday})` : ""}`
-    : repo.starsToday
-      ? `🚀今日 +${repo.starsToday}`
-      : null;
-  const meta = [repo.language, stars, repo.forks ? `🍴 ${repo.forks}` : null]
-    .filter(Boolean)
-    .join(" | ");
-
-  return [
-    `📦 **${markdownLink(repo.fullName, repo.url)}**`,
-    meta ? `*${meta}*` : null,
-    `💡**AI 总结**：${repo.aiSummary || repo.description || "No summary provided."}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function formatDigestItem(item: DigestItem): string {
-  const publishedRaw = item.meta?.match(/^published:\s*(.+)$/i)?.[1];
-  const published = formatDisplayDate(publishedRaw);
-  const meta = [
-    `来源: ${item.source ?? "unknown"}`,
-    published ? `发布于: ${published}` : item.meta,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
-  return [
-    `📰 **${markdownLink(item.title, item.url)}**`,
-    meta,
-    `**摘要提取**：${item.summary}`,
-  ].join("\n");
+function escapeMarkdownTableCell(value: string | undefined): string {
+  return compactWhitespace(value || "-").replace(/\|/g, "\\|");
 }
 
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 3).trim()}...`;
+}
+
+function oneLineSummary(value: string | undefined, maxLength: number): string {
+  const text = compactWhitespace(value || "No summary provided.");
+  const sentence = text.match(/^(.+?[。.!?！？；;])(?:\s|$)/)?.[1] ?? text;
+  return truncate(sentence, maxLength);
+}
+
+function splitIntoOverviewPages<T>(items: T[]): T[][] {
+  const normalized = items.slice(0, DIGEST_OVERVIEW_ITEM_LIMIT);
+  const pages: T[][] = [];
+  for (let index = 0; index < normalized.length; index += DIGEST_OVERVIEW_PAGE_SIZE) {
+    pages.push(normalized.slice(index, index + DIGEST_OVERVIEW_PAGE_SIZE));
+  }
+  return pages;
+}
+
+function formatOverviewTables(
+  title: string,
+  headers: string[],
+  rows: string[][],
+): string[] {
+  const pages = splitIntoOverviewPages(rows);
+  return pages.map((pageRows, index) => [
+    `### ${title} ${index + 1}/${pages.length}`,
+    `| ${headers.join(" | ")} |`,
+    `| ${headers.map(() => "---").join(" | ")} |`,
+    ...pageRows.map((row) => `| ${row.join(" | ")} |`),
+  ].join("\n"));
+}
+
+function formatGithubStarTrend(repo: GithubRepo): string {
+  const parts = [
+    repo.totalStars ? `⭐ ${repo.totalStars}` : null,
+    repo.starsToday ? `今日 +${repo.starsToday}` : null,
+  ].filter(Boolean);
+  return parts.join(" / ") || "-";
+}
+
+function clampDigestItemLimit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return DEFAULT_DIGEST_ITEM_LIMIT;
+  return Math.min(Math.floor(value), DIGEST_OVERVIEW_ITEM_LIMIT);
+}
+
+function getPositiveIntegerEnv(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+export function getDigestItemLimit(): number {
+  return clampDigestItemLimit(Number(process.env.DIGEST_ITEM_LIMIT ?? DEFAULT_DIGEST_ITEM_LIMIT));
+}
+
+export function formatGithubOverviewPages(repos: GithubRepo[]): string[] {
+  return formatOverviewTables(
+    "GitHub Trending 总览",
+    ["项目", "语言", "Star 趋势", "一句话总结"],
+    repos.map((repo) => [
+      escapeMarkdownTableCell(markdownLink(repo.fullName, repo.url)),
+      escapeMarkdownTableCell(repo.language),
+      escapeMarkdownTableCell(formatGithubStarTrend(repo)),
+      escapeMarkdownTableCell(oneLineSummary(repo.aiSummary || repo.description, 88)),
+    ]),
+  );
+}
+
+export function formatAiNewsOverviewPages(items: DigestItem[]): string[] {
+  return formatOverviewTables(
+    "AI 新闻总览",
+    ["标题", "来源", "一句话摘要"],
+    items.map((item) => [
+      escapeMarkdownTableCell(markdownLink(item.title, item.url)),
+      escapeMarkdownTableCell(item.source),
+      escapeMarkdownTableCell(oneLineSummary(item.summary, 96)),
+    ]),
+  );
+}
+
+export function formatArxivOverviewPages(papers: ArxivPaper[]): string[] {
+  return formatOverviewTables(
+    "arXiv 论文总览",
+    ["论文", "发布时间", "一句话摘要"],
+    papers.map((paper) => [
+      escapeMarkdownTableCell(markdownLink(paper.title, paper.url)),
+      escapeMarkdownTableCell(paper.published?.slice(0, 10)),
+      escapeMarkdownTableCell(oneLineSummary(paper.summary, 100)),
+    ]),
+  );
 }
 
 export function getGithubReadmeSummaryMaxChars(): number {
@@ -193,15 +256,6 @@ export function getGithubReadmeSummaryInstruction(): string {
     "必须说明：它解决什么问题、核心能力是什么、适合谁关注或使用。",
     "不要逐字翻译 README，不要添加原文没有的信息，不要输出英文摘要，不要输出 Markdown，不要输出标题。",
   ].join("\n");
-}
-
-function formatDisplayDate(value?: string): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) {
-    return date.toISOString().slice(0, 10);
-  }
-  return value.slice(0, 10);
 }
 
 function getAihotApiBaseUrl(): string {
@@ -313,8 +367,32 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function shouldRetryStatus(status: number): boolean {
-  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+function shouldRetryHttpStatus(status: number, retryRateLimit: boolean): boolean {
+  if (status === 429) return retryRateLimit;
+  return status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return Math.max(0, date.getTime() - Date.now());
+  }
+  return undefined;
+}
+
+class FetchHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterMs?: number,
+  ) {
+    super(message);
+    this.name = "FetchHttpError";
+  }
 }
 
 async function fetchText(
@@ -322,8 +400,10 @@ async function fetchText(
   headers?: HeadersInit,
   attempts = 3,
   retryBaseMs = 1000,
+  options: { retryRateLimit?: boolean } = {},
 ): Promise<string> {
   let lastError: unknown;
+  const retryRateLimit = options.retryRateLimit ?? true;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -335,16 +415,30 @@ async function fetchText(
       if (response.ok) {
         return response.text();
       }
-      if (!shouldRetryStatus(response.status) || attempt === attempts) {
-        throw new Error(`GET ${url} failed: ${response.status}`);
+      const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+      const error = new FetchHttpError(
+        `GET ${url} failed: ${response.status}`,
+        response.status,
+        retryAfterMs,
+      );
+      if (!shouldRetryHttpStatus(response.status, retryRateLimit) || attempt === attempts) {
+        throw error;
       }
-      lastError = new Error(`GET ${url} failed: ${response.status}`);
+      lastError = error;
     } catch (error) {
       lastError = error;
+      if (
+        error instanceof FetchHttpError &&
+        !shouldRetryHttpStatus(error.status, retryRateLimit)
+      ) {
+        break;
+      }
       if (attempt === attempts) break;
     }
 
-    await sleep(retryBaseMs * attempt);
+    const retryAfterMs =
+      lastError instanceof FetchHttpError ? lastError.retryAfterMs : undefined;
+    await sleep(Math.min(retryAfterMs ?? retryBaseMs * attempt, 60_000));
   }
 
   throw lastError instanceof Error ? lastError : new Error(`GET ${url} failed`);
@@ -487,7 +581,10 @@ async function enrichGithubReposWithAiSummaries(repos: GithubRepo[]): Promise<Gi
   });
 }
 
-export async function fetchGithubTrendingDigest(limit = 10): Promise<string[]> {
+export async function fetchGithubTrendingDigest(
+  limit = getDigestItemLimit(),
+): Promise<string[]> {
+  const itemLimit = clampDigestItemLimit(limit);
   const language = process.env.GITHUB_TRENDING_LANGUAGE ?? "";
   const path = language ? `/${encodeURIComponent(language)}` : "";
   const url = `https://github.com/trending${path}?since=daily`;
@@ -496,19 +593,20 @@ export async function fetchGithubTrendingDigest(limit = 10): Promise<string[]> {
     const html = await fetchText(url, {
       Accept: "text/html",
     });
-    const repos = parseGithubTrending(html, limit);
+    const repos = parseGithubTrending(html, itemLimit);
     if (repos.length > 0) {
       const summarizedRepos = await enrichGithubReposWithAiSummaries(repos);
-      return summarizedRepos.map(formatRepo);
+      return formatGithubOverviewPages(summarizedRepos);
     }
   } catch (error) {
     console.warn("[Digest] GitHub Trending scrape failed, falling back to Search API", error);
   }
 
-  return fetchGithubSearchFallback(limit);
+  const fallbackRepos = await fetchGithubSearchFallback(itemLimit);
+  return formatGithubOverviewPages(fallbackRepos);
 }
 
-async function fetchGithubSearchFallback(limit: number): Promise<string[]> {
+async function fetchGithubSearchFallback(limit: number): Promise<GithubRepo[]> {
   const timezone = process.env.SCHEDULER_TIMEZONE ?? "Asia/Shanghai";
   const since = getDateInTimezone(new Date(Date.now() - 24 * 60 * 60 * 1000), timezone);
   const query = process.env.GITHUB_TRENDING_SEARCH_QUERY ?? `created:>=${since} stars:>10 fork:false`;
@@ -544,7 +642,7 @@ async function fetchGithubSearchFallback(limit: number): Promise<string[]> {
     };
   });
   const summarizedRepos = await enrichGithubReposWithAiSummaries(repos);
-  return summarizedRepos.map(formatRepo);
+  return summarizedRepos;
 }
 
 function parseRssItems(xml: string, source: string): DigestItem[] {
@@ -608,16 +706,16 @@ function pickAihotDailyItems(daily: AihotDailyResponse, limit: number): DigestIt
   return picked;
 }
 
-async function fetchAihotDailyDigest(limit: number, digestDate?: string): Promise<string[]> {
+async function fetchAihotDailyItems(limit: number, digestDate?: string): Promise<DigestItem[]> {
   const baseUrl = getAihotApiBaseUrl();
   const path = digestDate
     ? `/api/public/daily/${encodeURIComponent(digestDate)}`
     : "/api/public/daily";
   const daily = await fetchJson<AihotDailyResponse>(`${baseUrl}${path}`, getAihotHeaders());
-  return pickAihotDailyItems(daily, limit).map(formatDigestItem);
+  return pickAihotDailyItems(daily, limit);
 }
 
-async function fetchAihotSelectedDigest(limit: number): Promise<string[]> {
+async function fetchAihotSelectedItems(limit: number): Promise<DigestItem[]> {
   const baseUrl = getAihotApiBaseUrl();
   const url = new URL(`${baseUrl}/api/public/items`);
   url.searchParams.set("mode", "selected");
@@ -632,15 +730,14 @@ async function fetchAihotSelectedDigest(limit: number): Promise<string[]> {
       source: item.source ?? "AI HOT",
       summary: item.summary || "No summary provided.",
       meta: item.publishedAt ? `published: ${item.publishedAt}` : item.category ? `分类: ${item.category}` : undefined,
-    }))
-    .map(formatDigestItem);
+    }));
 }
 
-async function fetchAihotDigest(limit: number, digestDate?: string): Promise<string[]> {
+async function fetchAihotItems(limit: number, digestDate?: string): Promise<DigestItem[]> {
   if (getAihotDigestMode() === "selected") {
-    return fetchAihotSelectedDigest(limit);
+    return fetchAihotSelectedItems(limit);
   }
-  return fetchAihotDailyDigest(limit, digestDate);
+  return fetchAihotDailyItems(limit, digestDate);
 }
 
 function hostnameFromUrl(url: string): string {
@@ -709,21 +806,22 @@ async function translateAiNewsItems(items: DigestItem[]): Promise<DigestItem[]> 
 }
 
 export async function fetchAiNewsDigest(
-  limit = 10,
+  limit = getDigestItemLimit(),
   options: { digestDate?: string } = {},
 ): Promise<string[]> {
+  const itemLimit = clampDigestItemLimit(limit);
   if (isAihotAiNewsEnabled()) {
     try {
-      const items = await fetchAihotDigest(limit, options.digestDate);
-      if (items.length > 0) return items;
+      const items = await fetchAihotItems(itemLimit, options.digestDate);
+      if (items.length > 0) return formatAiNewsOverviewPages(items);
     } catch (error) {
       console.warn("[Digest] AIHOT fetch failed, falling back to RSS/HN", error);
     }
   }
 
   const [rssItems, hnItems] = await Promise.all([
-    fetchAiNewsFromRss(Math.ceil(limit * 0.7)),
-    fetchAiNewsFromHackerNews(Math.floor(limit * 0.3)),
+    fetchAiNewsFromRss(Math.ceil(itemLimit * 0.7)),
+    fetchAiNewsFromHackerNews(Math.floor(itemLimit * 0.3)),
   ]);
 
   const seen = new Set<string>();
@@ -734,9 +832,9 @@ export async function fetchAiNewsDigest(
       seen.add(key);
       return true;
     })
-    .slice(0, limit);
+    .slice(0, itemLimit);
   const translatedItems = await translateAiNewsItems(items);
-  return translatedItems.map(formatDigestItem);
+  return formatAiNewsOverviewPages(translatedItems);
 }
 
 function parseArxivPapers(xml: string): ArxivPaper[] {
@@ -764,29 +862,6 @@ function parseArxivPapers(xml: string): ArxivPaper[] {
   }).filter((paper): paper is ArxivPaper => Boolean(paper.url));
 }
 
-function formatArxivPaper(paper: ArxivPaper): string {
-  const authors = paper.authors.length
-    ? `${paper.authors.slice(0, 4).join(", ")}${paper.authors.length > 4 ? ", et al." : ""}`
-    : null;
-  const meta = [
-    authors,
-    paper.primaryCategory ? `分类: ${paper.primaryCategory}` : null,
-    paper.published ? `发布时间: ${paper.published.slice(0, 10)}` : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
-  return [
-    `📄 **${markdownLink(paper.title, paper.url)}**`,
-    "",
-    meta,
-    "",
-    `**Abstract**: ${truncate(paper.summary || "No abstract provided.", 520)}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 async function translateArxivPapers(papers: ArxivPaper[]): Promise<ArxivPaper[]> {
   if (!getDigestSummaryClient() || papers.length === 0) return papers;
   const maxChars = Number(process.env.ARXIV_TRANSLATION_MAX_CHARS ?? DEFAULT_ARXIV_TRANSLATION_MAX_CHARS);
@@ -806,7 +881,10 @@ async function translateArxivPapers(papers: ArxivPaper[]): Promise<ArxivPaper[]>
   });
 }
 
-export async function fetchArxivAiPapersDigest(limit = 10): Promise<string[]> {
+export async function fetchArxivAiPapersDigest(
+  limit = getDigestItemLimit(),
+): Promise<string[]> {
+  const itemLimit = clampDigestItemLimit(limit);
   const query =
     process.env.ARXIV_AI_SEARCH_QUERY ??
     (process.env.ARXIV_AI_CATEGORIES ?? DEFAULT_ARXIV_AI_CATEGORIES.join(","))
@@ -819,7 +897,7 @@ export async function fetchArxivAiPapersDigest(limit = 10): Promise<string[]> {
   const url = new URL("https://export.arxiv.org/api/query");
   url.searchParams.set("search_query", query);
   url.searchParams.set("start", "0");
-  url.searchParams.set("max_results", String(limit));
+  url.searchParams.set("max_results", String(itemLimit));
   url.searchParams.set("sortBy", "submittedDate");
   url.searchParams.set("sortOrder", "descending");
 
@@ -828,27 +906,29 @@ export async function fetchArxivAiPapersDigest(limit = 10): Promise<string[]> {
     {
       Accept: "application/atom+xml, application/xml",
     },
-    5,
-    10000,
+    getPositiveIntegerEnv("ARXIV_FETCH_ATTEMPTS", DEFAULT_ARXIV_FETCH_ATTEMPTS),
+    getPositiveIntegerEnv("ARXIV_RETRY_BASE_MS", DEFAULT_ARXIV_RETRY_BASE_MS),
+    { retryRateLimit: false },
   );
-  const papers = parseArxivPapers(xml).slice(0, limit);
+  const papers = parseArxivPapers(xml).slice(0, itemLimit);
   const translatedPapers = await translateArxivPapers(papers);
-  return translatedPapers.map(formatArxivPaper);
+  return formatArxivOverviewPages(translatedPapers);
 }
 
 export async function fetchDigestItems(
   type: DigestType,
-  limit = 10,
+  limit = getDigestItemLimit(),
   options: { digestDate?: string } = {},
 ): Promise<string[]> {
+  const itemLimit = clampDigestItemLimit(limit);
   if (type === "GITHUB_TRENDING") {
-    return fetchGithubTrendingDigest(limit);
+    return fetchGithubTrendingDigest(itemLimit);
   }
   if (type === "AI_NEWS") {
-    return fetchAiNewsDigest(limit, options);
+    return fetchAiNewsDigest(itemLimit, options);
   }
   if (type === "ARXIV_AI_PAPERS") {
-    return fetchArxivAiPapersDigest(limit);
+    return fetchArxivAiPapersDigest(itemLimit);
   }
   return [];
 }

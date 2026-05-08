@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { fetchDigestItems } from "@/lib/digest/sources";
-import { getDigestDate, pushDigestToTarget, resolveDigestReceiver } from "@/lib/digest/delivery";
+import { getAiNewsDigestCacheDate } from "@/lib/digest/sources";
+import {
+  getDigestDate,
+  getDigestItemsForDate,
+  pushDigestToTarget,
+  resolveDigestReceiver,
+} from "@/lib/digest/delivery";
 import type { DigestType, TargetType } from "@/types";
 
 const DIGEST_TYPES = ["GITHUB_TRENDING", "AI_NEWS", "ARXIV_AI_PAPERS"] as const;
@@ -47,15 +52,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const items = await fetchDigestItems(digestType, Number(process.env.DIGEST_ITEM_LIMIT ?? 10));
+    const timezone = process.env.SCHEDULER_TIMEZONE ?? "Asia/Shanghai";
+    const now = new Date();
+    const scheduleDate = getDigestDate(now, timezone);
+    const digestDate = digestType === "AI_NEWS"
+      ? getAiNewsDigestCacheDate(now, timezone)
+      : scheduleDate;
+    const items = await getDigestItemsForDate(prisma, digestType, digestDate);
+    if (items.length === 0) {
+      return NextResponse.json(
+        { error: "Digest content is temporarily unavailable; retry after the fetch cooldown." },
+        { status: 503 },
+      );
+    }
     const receiver = await resolveDigestReceiver(
       prisma,
       subscription.targetType as TargetType,
       subscription.targetId,
-    );
-    const digestDate = getDigestDate(
-      new Date(),
-      process.env.SCHEDULER_TIMEZONE ?? "Asia/Shanghai",
     );
     const success = await pushDigestToTarget({
       receiver,
