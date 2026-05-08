@@ -177,6 +177,76 @@ docker compose down -v
 - `npm run lint`：代码检查
 - `npm run scheduler`：运行定时调度
 
+## 本地题库同步
+
+项目支持从根目录下的 `question-banks/` 文件夹增量同步官方题库。该目录建议作为单独的私有题库仓库维护，并已在主项目 `.gitignore` 中忽略。
+
+目录示例：
+
+```text
+learn/
+├─ question-banks/
+│  ├─ 英语.json
+│  └─ AI周报.json
+└─ package.json
+```
+
+同步前需要在 `.env` 中配置题库归属用户，可填写 `User.id`、`User.uid` 或 `User.email`：
+
+```bash
+QUESTION_SYNC_OWNER_UID="cmmqr2rw70000rctqyivhmcwe"
+```
+
+同步命令：
+
+```bash
+cd question-banks
+git pull
+
+cd ..
+npm run sync:question-banks
+```
+
+每个 `.json` 文件会自动对应一个题库，文件名就是默认题库名，例如 `英语.json` 会创建或更新「英语」题库。同步只新增或更新题目，不会自动删除 JSON 中已经移除的旧题，避免影响订阅和历史推送记录。新增题目会以 `PUBLISHED` 状态导入；如果该题库有已经停用的订阅，新增题目后会自动重新激活订阅。
+
+最简单的题库格式是题目数组：
+
+```json
+[
+  {
+    "content": "Choose the correct word: I ___ to school every day.",
+    "options": {
+      "A": "go",
+      "B": "goes",
+      "C": "went",
+      "D": "gone"
+    },
+    "correctAnswer": "A",
+    "explanation": "The subject is I, so the base verb go is correct."
+  }
+]
+```
+
+也可以使用带元信息的格式：
+
+```json
+{
+  "title": "英语",
+  "description": "英语每日练习题库",
+  "visibility": "PUBLIC",
+  "questions": [
+    {
+      "content": "题干",
+      "options": { "A": "选项 A", "B": "选项 B" },
+      "correctAnswer": "A",
+      "explanation": "解析"
+    }
+  ]
+}
+```
+
+同步时使用 `content + correctAnswer` 判断是否是同一道题；如果选项或解析变化，会更新原题；如果是新题，会追加到对应题库。
+
 ## 项目文档
 
 - 设计文档：`docs/plans/2026-03-15-knowledge-push-design.md`

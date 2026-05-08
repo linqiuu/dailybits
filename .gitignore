@@ -30,6 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .runtime-logs/
+question-banks/
 
 # env files
 .env

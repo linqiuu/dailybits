@@ -71,12 +71,17 @@ model QuestionBank {
   subscriberCount    Int            @default(0)
   visibility         Visibility     @default(PRIVATE)
   visibleDepartments String[]       @default([])
+  isOfficial         Boolean        @default(false)
+  externalSource     String?
+  externalSlug       String?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   creator            User           @relation(fields: [creatorId], references: [id])
   questions          Question[]
   subscriptions      Subscription[]
   comments           Comment[]
+
+  @@unique([externalSource, externalSlug])
 }
 
 enum TargetType {
@@ -93,21 +98,26 @@ enum QuestionSource {
   MANUAL
   EXCEL_IMPORT
   AI_GENERATED
+  LOCAL_SYNC
 }
 
 model Question {
-  id            String         @id @default(cuid())
-  bankId        String
-  content       String
-  options       Json
-  correctAnswer String
-  explanation   String
-  status        QuestionStatus @default(DRAFT)
-  source        QuestionSource @default(MANUAL)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  bank          QuestionBank   @relation(fields: [bankId], references: [id], onDelete: Cascade)
-  pushLogs      PushLog[]
+  id                   String         @id @default(cuid())
+  bankId               String
+  content              String
+  options              Json
+  correctAnswer        String
+  explanation          String
+  status               QuestionStatus @default(DRAFT)
+  source               QuestionSource @default(MANUAL)
+  externalIdentityHash String?
+  externalContentHash  String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  bank                 QuestionBank   @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  pushLogs             PushLog[]
+
+  @@unique([bankId, externalIdentityHash])
 }
 
 enum EndCondition {
