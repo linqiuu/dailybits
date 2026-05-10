@@ -5,6 +5,7 @@ import { PrismaClient } from "../generated/prisma/client.js";
 import type { TargetType, EndCondition } from "../generated/prisma/client.js";
 import Holidays from "date-holidays";
 import { runDueDigestSubscriptions } from "../lib/digest/delivery.js";
+import { runDueKnowledgeSubscriptions } from "../lib/knowledge/delivery.js";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -155,6 +156,7 @@ cron.schedule("* * * * *", async () => {
   console.log(`[Scheduler] Tick at ${currentTime}`);
 
   await runDueDigestSubscriptions(prisma, currentTime, schedulerTZ);
+  await runDueKnowledgeSubscriptions(prisma, currentTime, schedulerTZ);
 
   const skipDecision = shouldSkipPushToday(now);
   if (skipDecision.skip) {

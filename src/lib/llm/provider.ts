@@ -1,9 +1,14 @@
-import type { GeneratedQuestion } from "@/types";
+import type { GeneratedKnowledgePoint, GeneratedQuestion } from "@/types";
 import { DeepSeekProvider } from "./deepseek";
 import { OpenAIProvider } from "./openai";
 
 export interface LLMProvider {
   generateQuestions(text: string, count?: number): Promise<GeneratedQuestion[]>;
+  generateKnowledgeCards(
+    text: string,
+    count?: number,
+    systemPrompt?: string,
+  ): Promise<GeneratedKnowledgePoint[]>;
 }
 
 export function createLLMProvider(): LLMProvider {

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { SubscriptionList } from "@/components/dashboard/subscription-list";
+import { KnowledgeSubscriptionList } from "@/components/dashboard/knowledge-subscription-list";
 import { PushHistory } from "@/components/dashboard/push-history";
 
 export default function DashboardPage() {
@@ -30,6 +31,7 @@ export default function DashboardPage() {
       <h1 className="font-serif text-3xl font-semibold tracking-wide text-foreground">我的书房</h1>
       <StatsCards />
       <SubscriptionList />
+      <KnowledgeSubscriptionList />
       <PushHistory />
     </div>
   );

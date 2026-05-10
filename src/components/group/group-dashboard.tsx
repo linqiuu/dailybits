@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
 import { Search, Clock, BookOpen, Users, CheckCircle, Bell } from "lucide-react";
 import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
+import { KnowledgeExplorer } from "@/components/knowledge/knowledge-explorer";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
@@ -190,7 +191,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         {banksData && (
           <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm shadow-sm">
             <Users className="size-3.5 text-primary/70" />
-            <span className="text-muted-foreground">可用题库</span>
+            <span className="text-muted-foreground">可用练习</span>
             <span className="font-semibold">{banksData.total}</span>
           </div>
         )}
@@ -201,14 +202,14 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
       {/* tabs */}
       <Tabs defaultValue="banks">
-        <TabsList className="grid h-10 w-full grid-cols-3 gap-1 p-1">
+        <TabsList className="grid h-10 w-full grid-cols-4 gap-1 p-1">
           <TabsTrigger value="banks" className="h-8 min-w-0 gap-1.5 px-2">
             <BookOpen className="size-3.5" />
-            题库广场
+            答题练习
           </TabsTrigger>
           <TabsTrigger value="subscriptions" className="h-8 min-w-0 gap-1.5 px-2">
             <CheckCircle className="size-3.5" />
-            已订阅
+            题库订阅
             {subCount > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 min-w-5 rounded-full px-1.5 text-[10px] font-semibold">
                 {subCount}
@@ -217,11 +218,14 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           </TabsTrigger>
           <TabsTrigger value="digests" className="h-8 min-w-0 gap-1.5 px-2">
             <Bell className="size-3.5" />
-            固定推送
+            资讯摘要
+          </TabsTrigger>
+          <TabsTrigger value="knowledge" className="h-8 min-w-0 gap-1.5 px-2">
+            知识卡片
           </TabsTrigger>
         </TabsList>
 
-        {/* ---------- tab: 题库广场 ---------- */}
+        {/* ---------- tab: 答题练习 ---------- */}
         <TabsContent value="banks" className="pt-4">
           <BanksTab
             banksData={banksData}
@@ -248,13 +252,20 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           />
         </TabsContent>
 
-        {/* ---------- tab: 固定推送 ---------- */}
+        {/* ---------- tab: 资讯摘要 ---------- */}
         <TabsContent value="digests" className="pt-4">
           <DigestSubscriptionList
             targetType="GROUP"
             targetId={groupId}
-            title="群固定推送"
+            title="群资讯摘要"
             description="给这个群订阅 GitHub Trending、AI 新闻和 arXiv 论文摘要。"
+          />
+        </TabsContent>
+        <TabsContent value="knowledge" className="pt-4">
+          <KnowledgeExplorer
+            targetType="GROUP"
+            targetId={groupId}
+            showCreate={false}
           />
         </TabsContent>
       </Tabs>
@@ -262,7 +273,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   );
 }
 
-/* ========== Tab 1: 题库广场 ========== */
+/* ========== Tab 1: 答题练习 ========== */
 
 function BanksTab({
   banksData,
@@ -622,7 +633,7 @@ function SubscriptionsTab({
     return (
       <EmptyState
         title="暂无订阅"
-        description="前往「题库广场」浏览并订阅题库"
+        description="前往「答题练习」浏览并订阅题库"
         illustration="book"
       />
     );

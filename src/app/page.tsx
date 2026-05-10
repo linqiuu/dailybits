@@ -1,6 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import { BankExplorer } from "@/components/bank/bank-explorer";
 import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
+import { KnowledgeExplorer } from "@/components/knowledge/knowledge-explorer";
 import {
   Tabs,
   TabsContent,
@@ -15,9 +16,11 @@ export default function Home() {
     <div className="page-enter space-y-6">
       <header className="space-y-1">
         <h1 className="font-serif text-3xl font-semibold tracking-wide">
-          探索题库
+          学习推送
         </h1>
-        <p className="text-muted-foreground">每日一题，温故知新</p>
+        <p className="text-muted-foreground">
+          订阅答题练习、知识卡片和资讯摘要，按你的节奏推送到 IM。
+        </p>
       </header>
       {groupChatId ? (
         <div
@@ -35,16 +38,22 @@ export default function Home() {
         </div>
       ) : null}
       <Tabs defaultValue="banks" className="space-y-5">
-        <TabsList className="grid h-10 w-full max-w-xs grid-cols-2 gap-1 p-1">
+        <TabsList className="grid h-10 w-full max-w-md grid-cols-3 gap-1 p-1">
           <TabsTrigger value="banks" className="h-8 min-w-0 px-3">
-            题库
+            答题练习
+          </TabsTrigger>
+          <TabsTrigger value="knowledge" className="h-8 min-w-0 px-3">
+            知识卡片
           </TabsTrigger>
           <TabsTrigger value="digests" className="h-8 min-w-0 px-3">
-            固定推送
+            资讯摘要
           </TabsTrigger>
         </TabsList>
         <TabsContent value="banks">
           <BankExplorer />
+        </TabsContent>
+        <TabsContent value="knowledge">
+          <KnowledgeExplorer />
         </TabsContent>
         <TabsContent value="digests">
           <DigestSubscriptionList />

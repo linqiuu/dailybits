@@ -19,7 +19,7 @@ export default async function GroupPage({ params }: PageProps) {
           群组看板
         </h1>
         <p className="text-muted-foreground">
-          管理群组的题库订阅与推送配置
+          管理群组的答题练习、知识卡片和资讯摘要推送。
         </p>
       </header>
       <GroupDashboard groupId={groupId} />

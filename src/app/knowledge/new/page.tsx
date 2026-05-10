@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
 
 type Visibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
 
@@ -28,7 +28,7 @@ const VISIBILITY_LABELS: Record<Visibility, string> = {
 const inputBottomLineClass =
   "border-0 border-b rounded-none focus-visible:ring-0 focus-visible:ring-offset-0";
 
-export default function NewBankPage() {
+export default function NewKnowledgeBankPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -37,10 +37,21 @@ export default function NewBankPage() {
   const [deptInput, setDeptInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const addDepartment = () => {
+    const value = deptInput.trim();
+    if (!value) return;
+    if (visibleDepartments.includes(value)) {
+      toast.error("该部门已添加");
+      return;
+    }
+    setVisibleDepartments((prev) => [...prev, value]);
+    setDeptInput("");
+  };
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     if (!title.trim()) {
-      toast.error("请输入题库标题");
+      toast.error("请输入知识库标题");
       return;
     }
     if (visibility === "PARTIAL" && visibleDepartments.length === 0) {
@@ -49,7 +60,7 @@ export default function NewBankPage() {
     }
     setSubmitting(true);
     try {
-      const res = await fetch("/api/banks", {
+      const res = await fetch("/api/knowledge-banks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -60,13 +71,13 @@ export default function NewBankPage() {
             visibility === "PARTIAL" ? visibleDepartments : undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast.error(data.error ?? "创建失败");
         return;
       }
       toast.success("创建成功");
-      router.push(`/bank/${data.id}/edit`);
+      router.push(`/knowledge/${data.id}/edit`);
     } catch {
       toast.error("创建失败，请稍后重试");
     } finally {
@@ -78,7 +89,7 @@ export default function NewBankPage() {
     <div className="page-enter">
       <Card className="mx-auto max-w-lg">
         <CardHeader>
-          <CardTitle className="font-serif text-xl">创建题库</CardTitle>
+          <CardTitle className="font-serif text-xl">创建知识库</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -87,8 +98,8 @@ export default function NewBankPage() {
               <Input
                 id="title"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="输入题库标题"
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="例如：AI 工程每日知识"
                 className={inputBottomLineClass}
                 required
               />
@@ -98,8 +109,8 @@ export default function NewBankPage() {
               <Textarea
                 id="description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="输入题库描述"
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="这个知识库适合谁、主要推送什么"
                 className={inputBottomLineClass}
                 rows={4}
               />
@@ -108,7 +119,7 @@ export default function NewBankPage() {
               <Label>可见范围</Label>
               <Select
                 value={visibility}
-                onValueChange={(v) => setVisibility(v as Visibility)}
+                onValueChange={(value) => setVisibility(value as Visibility)}
               >
                 <SelectTrigger className={inputBottomLineClass}>
                   <SelectValue placeholder="仅自己可见">
@@ -129,49 +140,34 @@ export default function NewBankPage() {
                   <div className="flex gap-2">
                     <Input
                       value={deptInput}
-                      onChange={(e) => setDeptInput(e.target.value)}
+                      onChange={(event) => setDeptInput(event.target.value)}
                       placeholder="部门名称"
                       className={inputBottomLineClass}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          const v = deptInput.trim();
-                          if (v && !visibleDepartments.includes(v)) {
-                            setVisibleDepartments((d) => [...d, v]);
-                            setDeptInput("");
-                          }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addDepartment();
                         }
                       }}
                     />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        const v = deptInput.trim();
-                        if (!v) return;
-                        if (visibleDepartments.includes(v)) {
-                          toast.error("该部门已添加");
-                          return;
-                        }
-                        setVisibleDepartments((d) => [...d, v]);
-                        setDeptInput("");
-                      }}
-                    >
+                    <Button type="button" variant="secondary" onClick={addDepartment}>
                       添加
                     </Button>
                   </div>
                   {visibleDepartments.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {visibleDepartments.map((d) => (
+                      {visibleDepartments.map((department) => (
                         <Badge
-                          key={d}
+                          key={department}
                           variant="secondary"
                           className="cursor-pointer font-normal"
                           onClick={() =>
-                            setVisibleDepartments((prev) => prev.filter((x) => x !== d))
+                            setVisibleDepartments((prev) =>
+                              prev.filter((item) => item !== department),
+                            )
                           }
                         >
-                          {d} ×
+                          {department} ×
                         </Badge>
                       ))}
                     </div>
@@ -180,7 +176,7 @@ export default function NewBankPage() {
               )}
             </div>
             <Button type="submit" disabled={submitting}>
-              {submitting ? "创建中..." : "创建"}
+              {submitting ? "创建中..." : "创建并添加知识点"}
             </Button>
           </form>
         </CardContent>

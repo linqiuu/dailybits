@@ -51,10 +51,12 @@ model User {
   accounts                Account[]
   sessions                Session[]
   banks                   QuestionBank[]
+  knowledgeBanks          KnowledgeBank[]
   comments                Comment[]
   commentLikes            CommentLike[]
   subscribedSubscriptions Subscription[] @relation("SubscribedBy")
   digestSubscriptions     DigestSubscription[] @relation("DigestSubscribedBy")
+  knowledgeSubscriptions  KnowledgeSubscription[] @relation("KnowledgeSubscribedBy")
 }
 
 enum Visibility {
@@ -120,6 +122,42 @@ model Question {
   @@unique([bankId, externalIdentityHash])
 }
 
+model KnowledgeBank {
+  id                 String                  @id @default(cuid())
+  title              String
+  description        String?
+  creatorId          String
+  subscriberCount    Int                     @default(0)
+  visibility         Visibility              @default(PRIVATE)
+  visibleDepartments String[]                @default([])
+  generationPrompt   String?                 @db.Text
+  externalSource     String?
+  externalSlug       String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  creator            User                    @relation(fields: [creatorId], references: [id])
+  points             KnowledgePoint[]
+  subscriptions      KnowledgeSubscription[]
+
+  @@unique([externalSource, externalSlug])
+}
+
+model KnowledgePoint {
+  id                   String             @id @default(cuid())
+  bankId               String
+  content              String             @db.Text
+  orderIndex           Int
+  externalIdentityHash String?
+  externalContentHash  String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  bank                 KnowledgeBank      @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  pushLogs             KnowledgePushLog[]
+
+  @@index([bankId, orderIndex])
+  @@unique([bankId, externalIdentityHash])
+}
+
 enum EndCondition {
   END_AFTER_COMPLETE
   REPEAT_N_TIMES
@@ -167,6 +205,24 @@ model DigestSubscription {
   @@index([digestType, isActive])
 }
 
+model KnowledgeSubscription {
+  id           String             @id @default(cuid())
+  targetType   TargetType         @default(USER)
+  targetId     String
+  bankId       String
+  pushTimes    String[]           @default(["09:00"])
+  isActive     Boolean            @default(true)
+  subscriberId String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  bank         KnowledgeBank      @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  subscriber   User?              @relation("KnowledgeSubscribedBy", fields: [subscriberId], references: [id])
+  pushLogs     KnowledgePushLog[]
+
+  @@unique([targetType, targetId, bankId])
+  @@index([targetType, targetId])
+}
+
 model DigestCache {
   id         String     @id @default(cuid())
   digestType DigestType
@@ -203,6 +259,25 @@ model DigestPushLog {
   @@unique([targetType, targetId, digestType, digestDate, pushTime])
   @@index([targetType, targetId])
   @@index([digestType, digestDate])
+}
+
+model KnowledgePushLog {
+  id               String                @id @default(cuid())
+  subscriptionId   String
+  targetType       TargetType            @default(USER)
+  targetId         String
+  bankId           String
+  knowledgePointId String
+  contentSnapshot  String                @db.Text
+  pushDate         String
+  pushTime         String
+  pushedAt         DateTime              @default(now())
+  subscription     KnowledgeSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  knowledgePoint   KnowledgePoint        @relation(fields: [knowledgePointId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, pushDate, pushTime])
+  @@index([targetType, targetId])
+  @@index([bankId, pushedAt])
 }
 
 model Comment {

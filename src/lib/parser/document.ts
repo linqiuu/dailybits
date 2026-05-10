@@ -1,5 +1,5 @@
 import { createLLMProvider } from "@/lib/llm/provider";
-import type { GeneratedQuestion } from "@/types";
+import type { GeneratedKnowledgePoint, GeneratedQuestion } from "@/types";
 
 const CHUNK_SIZE = 2000;
 const DEFAULT_COUNT_PER_CHUNK = 3;
@@ -56,6 +56,33 @@ export async function generateFromLongText(
   for (const chunk of chunks) {
     const questions = await llm.generateQuestions(chunk, perChunk);
     results.push(...questions);
+  }
+
+  if (count && results.length > count) {
+    return results.slice(0, count);
+  }
+
+  return results;
+}
+
+export async function generateKnowledgeCardsFromLongText(
+  text: string,
+  count?: number,
+  systemPrompt?: string
+): Promise<GeneratedKnowledgePoint[]> {
+  const chunks = chunkText(text);
+  if (chunks.length === 0) return [];
+
+  const llm = createLLMProvider();
+  const perChunk = count
+    ? Math.max(1, Math.ceil(count / chunks.length))
+    : DEFAULT_COUNT_PER_CHUNK;
+
+  const results: GeneratedKnowledgePoint[] = [];
+
+  for (const chunk of chunks) {
+    const points = await llm.generateKnowledgeCards(chunk, perChunk, systemPrompt);
+    results.push(...points);
   }
 
   if (count && results.length > count) {

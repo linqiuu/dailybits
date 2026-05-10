@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "eslint",
     "scheduler": "tsx src/scheduler/index.ts",
-    "sync:question-banks": "tsx scripts/sync-question-banks.ts"
+    "sync:banks": "tsx scripts/sync-question-banks.ts",
+    "sync:question-banks": "tsx scripts/sync-question-banks.ts",
+    "sync:questions-only": "tsx scripts/sync-question-banks.ts --questions-only",
+    "sync:knowledge-banks": "tsx scripts/sync-question-banks.ts --knowledge-only"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
