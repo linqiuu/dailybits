@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
+import { authorizeSubscriptionActor } from "@/lib/subscriptions/authorization";
 import { prisma } from "@/lib/prisma";
 import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
 
-async function authorizeDigestSubscription(subscriptionId: string, request: NextRequest) {
+async function authorizeDigestSubscription(subscriptionId: string) {
   const subscription = await prisma.digestSubscription.findUnique({
     where: { id: subscriptionId },
   });
@@ -12,20 +12,8 @@ async function authorizeDigestSubscription(subscriptionId: string, request: Next
     return { error: "Digest subscription not found", status: 404, subscription: null };
   }
 
-  if (subscription.targetType === "USER") {
-    const session = await getCurrentSession();
-    if (!session?.user?.id) {
-      return { error: "Unauthorized", status: 401, subscription: null };
-    }
-    if (subscription.targetId !== session.user.id) {
-      return { error: "Forbidden", status: 403, subscription: null };
-    }
-  } else if (subscription.targetType === "GROUP") {
-    const groupId = request.headers.get("x-group-id");
-    if (groupId && subscription.targetId !== groupId) {
-      return { error: "Forbidden", status: 403, subscription: null };
-    }
-  }
+  const denied = await authorizeSubscriptionActor(subscription);
+  if (denied) return { ...denied, subscription: null };
 
   return { error: null, status: 200, subscription };
 }
@@ -38,7 +26,7 @@ function parsePushTimes(value: unknown): string[] | NextResponse {
     );
   }
   const validTimes = value.filter(
-    (time) => typeof time === "string" && /^\d{2}:\d{2}$/.test(time),
+    (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time),
   );
   if (validTimes.length === 0) {
     return NextResponse.json(
@@ -67,7 +55,7 @@ export async function PATCH(
 ) {
   try {
     const { id } = await context.params;
-    const auth = await authorizeDigestSubscription(id, request);
+    const auth = await authorizeDigestSubscription(id);
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
@@ -97,7 +85,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await context.params;
-    const auth = await authorizeDigestSubscription(id, request);
+    const auth = await authorizeDigestSubscription(id);
     if (auth.error) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }

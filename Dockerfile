@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 
@@ -35,4 +35,4 @@ RUN npm run build
 EXPOSE 3000
 
 # Default command runs web service. Scheduler uses docker-compose override.
-CMD ["npm", "run", "start"]
+CMD ["node", "scripts/container-start.mjs", "web"]

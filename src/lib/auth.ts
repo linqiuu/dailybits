@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
-import { getUserDepartments } from "./getUserDepartments";
+import { cache } from "react";
+import { migrateUserTargets } from "./identity-migration";
+import { canReadContent, type ContentScope } from "./content/access";
 import {
   GatewayIdentityError,
   parseGatewayUserFromHeaders,
@@ -117,94 +119,55 @@ function nullableString(value: string): string | null {
   return trimmed ? trimmed : null;
 }
 
-async function userOwnsUniqueValue(
-  field: "uid" | "email",
-  value: string | null,
-  userId: string,
-): Promise<boolean> {
-  if (!value) return true;
-  const owner = field === "uid"
-    ? await prisma.user.findUnique({
-        where: { uid: value },
-        select: { id: true },
-      })
-    : await prisma.user.findUnique({
-        where: { email: value },
-        select: { id: true },
-      });
-  return !owner || owner.id === userId;
-}
-
 async function syncGatewayUser(gatewayUser: GatewayUser) {
   const uid = nullableString(gatewayUser.uid);
   const email = nullableString(gatewayUser.email);
   const displayName = nullableString(gatewayUser.displayName);
   const image = nullableString(gatewayUser.avatarUrl);
 
-  const byId = await prisma.user.findUnique({
-    where: { id: gatewayUser.id },
-  });
+  return prisma.$transaction(async (tx) => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dailybits:identity:${uid || email || gatewayUser.id}`}))`;
+  const [byId, byUid, byEmail] = await Promise.all([
+    tx.user.findUnique({ where: { id: gatewayUser.id } }),
+    uid ? tx.user.findUnique({ where: { uid } }) : null,
+    email ? tx.user.findUnique({ where: { email } }) : null,
+  ]);
+  const owners = new Set([byId, byUid, byEmail].filter(Boolean).map((user) => user!.id));
+  if (owners.size > 1) throw new Error("IDENTITY_MIGRATION_CONFLICT");
   if (byId) {
-    const data: {
-      uid?: string | null;
-      email?: string | null;
-      name: string | null;
-      image: string | null;
-    } = {
-      name: displayName,
-      image,
-    };
-    if (await userOwnsUniqueValue("uid", uid, gatewayUser.id)) {
-      data.uid = uid;
-    }
-    if (await userOwnsUniqueValue("email", email, gatewayUser.id)) {
-      data.email = email;
-    }
-    return prisma.user.update({
+    return tx.user.update({
       where: { id: gatewayUser.id },
-      data,
+      data: { uid, email, name: displayName, image, departmentIds: gatewayUser.departmentIds },
     });
   }
 
-  const legacy =
-    (uid
-      ? await prisma.user.findUnique({
-          where: { uid },
-        })
-      : null) ??
-    (email
-      ? await prisma.user.findUnique({
-          where: { email },
-        })
-      : null);
+  const legacy = byUid ?? byEmail;
 
   if (legacy) {
-    return prisma.user.update({
+    await migrateUserTargets(tx, legacy.id, gatewayUser.id);
+    return tx.user.update({
       where: { id: legacy.id },
       data: {
         id: gatewayUser.id,
-        uid:
-          uid && (await userOwnsUniqueValue("uid", uid, legacy.id))
-            ? uid
-            : legacy.uid,
-        email:
-          email && (await userOwnsUniqueValue("email", email, legacy.id))
-            ? email
-            : legacy.email,
+        uid,
+        email,
         name: displayName,
         image,
+        departmentIds: gatewayUser.departmentIds,
       },
     });
   }
 
-  return prisma.user.create({
+  return tx.user.create({
     data: {
       id: gatewayUser.id,
       uid,
       email,
       name: displayName,
       image,
+      departmentIds: gatewayUser.departmentIds,
     },
+  });
   });
 }
 
@@ -229,7 +192,7 @@ export function isAdminSession(session: AppSession | null | undefined): boolean 
   return !!session?.user?.id && session.user.isAdmin;
 }
 
-export async function getCurrentSession(): Promise<AppSession | null> {
+export const getCurrentSession = cache(async (): Promise<AppSession | null> => {
   try {
     const gatewayUser = await getCurrentGatewayUser();
     if (!gatewayUser) return null;
@@ -241,26 +204,16 @@ export async function getCurrentSession(): Promise<AppSession | null> {
     }
     throw error;
   }
-}
+});
 
 export async function getSessionDepartmentKeys(
   session: AppSession | null | undefined,
 ): Promise<string[]> {
   if (!session?.user?.id) return [];
 
-  const keys = new Set<string>();
-  for (const value of session.user.departmentIds) {
-    if (value) keys.add(value);
-  }
-  for (const value of session.user.departmentNames) {
-    if (value) keys.add(value);
-  }
-  if (session.user.department) keys.add(session.user.department);
+  return [...new Set(session.user.departmentIds.filter(Boolean))];
+}
 
-  const legacyDepartments = await getUserDepartments(session.user.uid);
-  for (const value of legacyDepartments) {
-    if (value) keys.add(value);
-  }
-
-  return [...keys];
+export function canAccessBank(bank: ContentScope, session: AppSession | null): boolean {
+  return canReadContent(bank, session?.user.id, session?.user.departmentIds);
 }

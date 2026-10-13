@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, LibraryBig, Send } from "lucide-react";
 import { MetricLine } from "@/components/ui/workbench";
+import { RequestState } from "@/components/ui/request-state";
 
 interface Stats {
   subscribedCount: number;
@@ -16,17 +17,21 @@ interface Stats {
 export function StatsCards() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     fetch("/api/dashboard/stats")
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Unavailable"); return res.json(); })
       .then((data) => {
         if (data.subscribedCount !== undefined) {
           setStats(data);
+          setFailed(false);
         }
       })
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
-  }, []);
+  }, [reload]);
 
   if (loading) {
     return (
@@ -40,6 +45,8 @@ export function StatsCards() {
       </div>
     );
   }
+
+  if (failed) return <RequestState title="统计暂时加载失败" onRetry={() => setReload((value) => value + 1)} />;
 
   const s = stats ?? {
     subscribedCount: 0,

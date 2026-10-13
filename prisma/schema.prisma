@@ -13,6 +13,7 @@ model User {
   email                   String?                 @unique
   name                    String?
   image                   String?
+  departmentIds           String[]                @default([])
   banks                   QuestionBank[]
   knowledgeBanks          KnowledgeBank[]
   comments                Comment[]
@@ -110,6 +111,7 @@ model KnowledgeBank {
   subscriberCount    Int                     @default(0)
   visibility         Visibility              @default(PRIVATE)
   visibleDepartments String[]                @default([])
+  visibleDepartmentNames String[]            @default([])
   generationPrompt   String?                 @db.Text
   externalSource     String?
   externalSlug       String?
@@ -159,6 +161,7 @@ model Subscription {
   endCondition EndCondition @default(END_AFTER_COMPLETE)
   repeatCount  Int          @default(0)
   currentCycle Int          @default(0)
+  generation   Int          @default(0)
   subscriberId String?
   createdAt    DateTime     @default(now())
   bank         QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
@@ -220,11 +223,68 @@ model PushLog {
   targetType TargetType @default(USER)
   targetId   String
   questionId String
+  subscriptionId String?
+  cycle      Int        @default(0)
+  generation Int        @default(0)
+  deliveryJobId String? @unique
   pushedAt   DateTime   @default(now())
   question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([targetType, targetId, questionId])
   @@index([targetType, targetId])
+  @@index([subscriptionId, generation, cycle])
+}
+
+enum DeliveryKind {
+  QUESTION
+  KNOWLEDGE
+  DIGEST
+}
+
+enum DeliveryStatus {
+  PENDING
+  PROCESSING
+  ACCEPTED
+  FAILED
+  CANCELLED
+  UNKNOWN
+}
+
+model DeliveryJob {
+  id                String         @id @default(cuid())
+  dedupeKey         String         @unique
+  kind              DeliveryKind
+  subscriptionId    String
+  targetType        TargetType
+  targetId          String
+  scheduleDate      String
+  pushTime          String
+  scheduledAt       DateTime
+  expiresAt         DateTime
+  status            DeliveryStatus @default(PENDING)
+  attempts          Int            @default(0)
+  nextAttemptAt     DateTime       @default(now())
+  lockedAt          DateTime?
+  lockToken         String?
+  payload           Json?
+  receipt           Json?
+  externalMessageId String?
+  lastErrorCode     String?
+  acceptedAt        DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([targetType, targetId, scheduledAt])
+  @@index([kind, scheduledAt])
+}
+
+model SchedulerState {
+  id         String   @id
+  lastTickAt DateTime
+  lastErrorCode String?
+  cursor     String?
+  updatedAt  DateTime @updatedAt
 }
 
 model QuestionAnswerEvent {

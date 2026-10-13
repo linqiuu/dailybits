@@ -27,18 +27,17 @@ export async function GET() {
             subscriptionCadence: true,
             subscriptionWeekdays: true,
             subscriptionPushTimes: true,
-            _count: { select: { questions: true } },
+            _count: { select: { questions: { where: { status: "PUBLISHED" } } } },
           },
         },
       },
     });
 
-    const bankIds = subscriptions.map((s) => s.bankId);
     const pushedWithBank = await prisma.pushLog.findMany({
       where: {
         targetType,
         targetId,
-        question: { bankId: { in: bankIds } },
+        OR: subscriptions.map((sub) => ({ question: { bankId: sub.bankId }, cycle: sub.currentCycle, generation: sub.generation })),
       },
       select: {
         questionId: true,

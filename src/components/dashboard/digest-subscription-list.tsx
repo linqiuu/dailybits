@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { RequestState } from "@/components/ui/request-state";
 import { SUBSCRIBABLE_DIGEST_TYPES } from "@/lib/digest/options";
 import {
   DIGEST_TYPES,
@@ -64,7 +65,7 @@ const ALL_DIGEST_OPTIONS: DigestOption[] = [
   {
     type: "AI_NEWS",
     title: "AI 新闻日报",
-    description: "OpenAI、MIT News 与高热 AI 讨论聚合。",
+    description: "AIHOT 每日精选，覆盖模型、研究与产品动态。",
     defaultTime: "09:20",
     icon: Newspaper,
   },
@@ -112,6 +113,7 @@ export function DigestSubscriptionList({
   const { status } = useSession();
   const [subscriptions, setSubscriptions] = useState<DigestSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [savingType, setSavingType] = useState<DigestType | null>(null);
   const [editingType, setEditingType] = useState<DigestType | null>(null);
   const [subscriberCounts, setSubscriberCounts] = useState<DigestSubscriptionCounts>(
@@ -146,7 +148,9 @@ export function DigestSubscriptionList({
       : `/api/digest-subscriptions/${id}`;
 
   const refresh = useCallback(async () => {
+    setFailed(false);
     const res = await fetch(collectionEndpoint);
+    if (!res.ok) { setFailed(true); throw new Error("Unavailable"); }
     const data = await res.json();
     const counts = parseSubscriberCounts(data);
     const items = Array.isArray(data)
@@ -166,7 +170,7 @@ export function DigestSubscriptionList({
         }
         return next;
       });
-    }
+    } else { setFailed(true); throw new Error("Invalid response"); }
   }, [collectionEndpoint]);
 
   useEffect(() => {
@@ -184,7 +188,7 @@ export function DigestSubscriptionList({
         return;
       }
       refresh()
-        .catch(() => toast.error("摘要订阅加载失败"))
+        .catch(() => setFailed(true))
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -259,6 +263,7 @@ export function DigestSubscriptionList({
     }
   };
 
+  if (failed) return <RequestState title="摘要订阅暂时加载失败" onRetry={() => void refresh().catch(() => setFailed(true))} />;
   if (loading) {
     return (
       <section className="space-y-4">

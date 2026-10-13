@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pushToTarget } from "./adapter";
+import { pushToTarget, sendToTarget } from "./adapter";
 import type { DigestPushPayload, PushPayload } from "../../types";
 
 test("maps question pushes to card-service QA cards", async () => {
@@ -210,6 +210,43 @@ test("retries Messaging rate limits with the same idempotency key", async () => 
     restoreEnvMap(originalEnv);
     globalThis.fetch = originalFetch;
   }
+});
+
+test("production cannot report a mock success for missing configuration", async () => {
+  const previous = saveEnv(["PUSH_PROVIDER", "PUSH_API_URL", "PUSH_MOCK", "NODE_ENV"]);
+  try {
+    process.env.PUSH_PROVIDER = "generic";
+    delete process.env.PUSH_API_URL;
+    process.env.PUSH_MOCK = "true";
+    Object.assign(process.env, { NODE_ENV: "production" });
+    const result = await sendToTarget({ receiver: "fixture", title: "Fixture", items: ["Fixture"], digestType: "AI_NEWS", digestDate: "2026-10-13" });
+    assert.deepEqual(result, { ok: false, code: "PUSH_NOT_CONFIGURED", retryable: false });
+  } finally { restoreEnvMap(previous); }
+});
+
+test("long idempotency keys do not collide and Retry-After is never shortened", async () => {
+  const previous = saveEnv(["PUSH_PROVIDER", "INNER_API_BASE_URL", "MESSAGING_RETRY_ATTEMPTS", "MESSAGING_MAX_RETRY_DELAY_MS"]);
+  const originalFetch = globalThis.fetch;
+  const keys: string[] = [];
+  try {
+    process.env.PUSH_PROVIDER = "messaging";
+    process.env.INNER_API_BASE_URL = "http://127.0.0.1:4010";
+    process.env.MESSAGING_RETRY_ATTEMPTS = "3";
+    process.env.MESSAGING_MAX_RETRY_DELAY_MS = "1";
+    globalThis.fetch = (async (_input, init) => {
+      keys.push(new Headers(init?.headers).get("Idempotency-Key")!);
+      return new Response(JSON.stringify({ error: { code: "rate_limited" } }), { status: 429, headers: { "Retry-After": "120" } });
+    }) as typeof fetch;
+    const payload = { receiver: "fixture", title: "Fixture", items: ["Fixture"], digestType: "AI_NEWS" as const, digestDate: "2026-10-13" };
+    for (const suffix of ["a", "b"]) {
+      const result = await sendToTarget({ ...payload, idempotencyKey: "x".repeat(128) + suffix });
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.retryAfterMs, 120000);
+    }
+    assert.equal(keys.length, 2);
+    assert.ok(keys.every(key => key.length <= 128));
+    assert.notEqual(keys[0], keys[1]);
+  } finally { restoreEnvMap(previous); globalThis.fetch = originalFetch; }
 });
 
 function restoreEnv(key: string, value: string | undefined): void {

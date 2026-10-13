@@ -4,6 +4,8 @@ import {
   isPushTimeCountAllowedForUpdate,
 } from "@/lib/subscriptions/push-times";
 import { prisma } from "@/lib/prisma";
+import { authorizeSubscriptionActor } from "@/lib/subscriptions/authorization";
+import { isValidPushTime } from "@/lib/subscriptions/schedule";
 
 type RouteContext = { params: Promise<{ groupId: string; id: string }> };
 
@@ -17,6 +19,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const subscription = await prisma.subscription.findUnique({
       where: { id },
+      include: { bank: true },
     });
 
     if (!subscription) {
@@ -27,6 +30,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
     if (subscription.targetType !== "GROUP" || subscription.targetId !== groupId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const denied = await authorizeSubscriptionActor(subscription);
+    if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+    if (subscription.bank.subscriptionScheduleMode === "FIXED") {
+      return NextResponse.json({ error: "This bank uses a creator-fixed schedule" }, { status: 400 });
     }
 
     const body = await request.json();
@@ -40,9 +48,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const validTimes = pushTimes.filter(
-      (t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t)
+      (t) => typeof t === "string" && isValidPushTime(t)
     );
-    if (validTimes.length === 0) {
+    if (validTimes.length !== pushTimes.length) {
       return NextResponse.json(
         { error: "pushTimes must contain valid HH:MM format strings" },
         { status: 400 }
@@ -94,6 +102,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     if (subscription.targetType !== "GROUP" || subscription.targetId !== groupId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    const denied = await authorizeSubscriptionActor(subscription);
+    if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
 
     await prisma.subscription.update({
       where: { id },

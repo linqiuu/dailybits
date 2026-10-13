@@ -23,7 +23,8 @@ DailyBits 是一个面向碎片化学习场景的知识推送平台，支持题�
 ## 技术栈
 
 - Next.js (App Router) + TypeScript
-- Tailwind CSS + shadcn/ui
+- Tailwind CSS + shadcn/Base UI + Lucide
+- Recharts（答题趋势）+ react-markdown / remark-gfm（真实推送预览）
 - Auth Hub 网关统一认证
 - Prisma + PostgreSQL
 - node-cron（独立调度进程）
@@ -35,7 +36,7 @@ DailyBits 是一个面向碎片化学习场景的知识推送平台，支持题�
 
 - Web 层：页面与 API 路由
 - 业务层：`src/lib` 沉淀核心逻辑
-- 调度层：`src/scheduler/index.ts` 每分钟扫描订阅并触发推送
+- 调度层：每分钟生成持久化任务，三类独立消费者处理；通过数据库租约、幂等键和有限重试恢复故障
 - 数据层：应用与调度器共享同一数据库
 
 ## 目录结构
@@ -118,7 +119,6 @@ GROUP_CHAT_ID=""              # 首页展示交流群号（选填）
 DIRECTORY_API_BASE_URL="http://127.0.0.1:4010"
 DIRECTORY_INNER_API_KEY=""
 DIRECTORY_INNER_API_KEY_HEADER="X-Inner-API-Key"
-DEPARTMENT_API_URL=""         # 旧部门查询接口（仅兼容历史数据）
 SCHEDULER_TIMEZONE="Asia/Shanghai"
 HOLIDAY_COUNTRY="CN"
 SKIP_NON_WORKING_DAYS="true"
@@ -155,7 +155,7 @@ Auth Hub 身份中如果包含 `X-User-Base64.departments[].department.id` 或�
 - 订阅者自定义：用户订阅时选择自己的推送时间。
 - 创建者固定：创建者设置每日或每周固定时间，用户点击订阅即可，不再选择时间。
 
-独立 Scheduler 每分钟按 `SCHEDULER_TIMEZONE` 计算当前时间；默认 `Asia/Shanghai`。`SKIP_NON_WORKING_DAYS=true` 时会跳过周末和 `HOLIDAY_COUNTRY` 对应法定节假日。
+独立 Scheduler 按 `SCHEDULER_TIMEZONE`（默认 `Asia/Shanghai`）生成持久化 `DeliveryJob`。恢复后默认补发最近 6 小时内的漏发任务；首次启动只扫描最近一分钟，不会把历史订阅全部重发。`SKIP_NON_WORKING_DAYS=true` 时按原定日期排除周末及节假日。群订阅仅允许公开内容，并由创建该群订阅的人或管理员维护。
 
 ## 卡片服务与答题回流
 
@@ -177,6 +177,10 @@ INNER_API_KEY=...
 
 用户点击 QA 卡片答题后，card-service 会回调 DailyBits `/api/card-events/qa-answer`。DailyBits 按 `cardId + respondentId` 幂等保存 `QuestionAnswerEvent`，创建者看板会展示每个题库的答题人数、答题次数和正确数，管理员总览会展示全站题库规模、每日答题趋势和使用量排行。
 
+需同时更新 card-service：`POST /send/qa` 必须支持稳定 `Idempotency-Key`；`GET /api/v1/qa/answers?source_system=dailybits&after_id=0` 支持递增游标。Scheduler 每分钟补拉答题事件，弥补回调失败。答题回调是机器接口，网关只对这个精确路径豁免登录，并保留共享密钥校验，不要豁免整个 `/api/*`。
+
+管理员总览区分 `上游已接收`、`待处理`、`发送失败`、`发送结果待确认`，接收回执不等同于终端已送达。未知结果不会盲目重发，需核对上游后处理。取消订阅或重新开始题库不删除历史推送记录；新一轮题库进度独立计算。
+
 ## Docker 部署
 
 项目已提供容器化配置，可一键启动 `Web + Scheduler + PostgreSQL`。同栈部署和迁库流程见 [docs/deployment-docker-compose.md](docs/deployment-docker-compose.md)。
@@ -190,12 +194,13 @@ cp .env.example .env
 至少补齐以下变量（推荐）：
 
 - 生产环境使用 `AUTH_MODE=gateway`，由公司 Auth Hub 网关注入 `X-User-*` 请求头
+- `POSTGRES_PASSWORD` 必填，不提供生产默认密码
 - `LLM_API_KEY`（如果使用 AI 生成能力）
 - `PUSH_API_URL`（generic webhook 模式）
 - 或 `PUSH_PROVIDER=card-service`、`CARD_SERVICE_API_BASE`、`CARD_SERVICE_SEND_API_KEY`（题目卡片走 card-service `/send/qa`）
 - `INNER_API_BASE_URL`、`INNER_API_KEY`（资讯摘要和知识卡片走公司 Messaging v1；开发 Mock 可不填真实 Key）
 
-> `docker-compose.yml` 会将应用进程里的 `DATABASE_URL` 覆盖为容器内数据库地址。默认值是 `postgresql://postgres:postgres@db:5432/dailybits?schema=public`，如需自定义可在 `.env` 设置 `POSTGRES_*` 或 `DOCKER_DATABASE_URL`。
+> 容器启动脚本从统一 `POSTGRES_*` 构建数据库 URL，并编码密码，不需要手动维护两套配置。仅连接外部库时设置 `DOCKER_DATABASE_URL`。PG 默认没有宿主机端口；Web 默认绑定 `127.0.0.1:3000`。跨机器网关接入时用 `APP_BIND_IP` 指定内网监听地址，并通过防火墙限制来源。
 
 ### AI 新闻源
 
@@ -243,6 +248,7 @@ docker compose down -v
 - `npm run build`：生产构建
 - `npm run start`：生产启动
 - `npm run lint`：代码检查
+- `npm test`：单元测试；指定 `TEST_DATABASE_URL` 后增加 PostgreSQL 故障恢复集成测试（必须使用独立测试库）
 - `npm run scheduler`：运行定时调度
 
 ## 本地题库同步

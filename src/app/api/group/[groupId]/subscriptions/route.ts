@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
+import { canManageSubscription, canSubscribeContent } from "@/lib/content/access";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionReuseAction } from "@/lib/subscriptions/reuse";
 import { normalizePushTimes } from "@/lib/subscriptions/schedule";
@@ -64,11 +65,15 @@ export async function GET(
   try {
     const { groupId } = await context.params;
 
+    const session = await getCurrentSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const subscriptions = await prisma.subscription.findMany({
       where: {
         targetType: "GROUP",
         targetId: groupId,
         isActive: true,
+        ...(!session.user.isAdmin ? { subscriberId: session.user.id } : {}),
       },
       include: {
         subscriber: {
@@ -84,19 +89,18 @@ export async function GET(
             subscriptionCadence: true,
             subscriptionWeekdays: true,
             subscriptionPushTimes: true,
-            _count: { select: { questions: true } },
+            _count: { select: { questions: { where: { status: "PUBLISHED" } } } },
           },
         },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    const bankIds = subscriptions.map((s) => s.bankId);
     const pushedLogs = await prisma.pushLog.findMany({
       where: {
         targetType: "GROUP",
         targetId: groupId,
-        question: { bankId: { in: bankIds } },
+        OR: subscriptions.map((sub) => ({ question: { bankId: sub.bankId }, cycle: sub.currentCycle, generation: sub.generation })),
       },
       select: {
         questionId: true,
@@ -170,6 +174,9 @@ export async function POST(
     if (!bank) {
       return NextResponse.json({ error: "Bank not found" }, { status: 404 });
     }
+    if (!canSubscribeContent(bank, "GROUP", session.user.id, session.user.departmentIds)) {
+      return NextResponse.json({ error: "群订阅仅支持公开内容" }, { status: 403 });
+    }
 
     const validTimes =
       bank.subscriptionScheduleMode === "FIXED"
@@ -198,6 +205,7 @@ export async function POST(
       },
     });
     if (existing) {
+      if (!canManageSubscription(existing, session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const reuse = getSubscriptionReuseAction(existing);
       if (reuse.action === "conflict") {
         return NextResponse.json(
@@ -225,6 +233,7 @@ export async function POST(
             endCondition,
             repeatCount,
             currentCycle: 0,
+            generation: { increment: 1 },
             subscriberId: session.user.id,
           },
           include: {
@@ -241,13 +250,6 @@ export async function POST(
             subscriber: {
               select: { id: true, name: true, uid: true },
             },
-          },
-        }),
-        prisma.pushLog.deleteMany({
-          where: {
-            targetType: "GROUP",
-            targetId: groupId,
-            question: { bankId: bank.id },
           },
         }),
       ]);

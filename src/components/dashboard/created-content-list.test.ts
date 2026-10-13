@@ -13,12 +13,13 @@ const componentSource = readFileSync(
   "utf8",
 );
 
-test("dashboard mounts the created content list after stats", () => {
+test("dashboard mounts created content in its own tab below the stats", () => {
   assert.match(dashboardPageSource, /import \{ CreatedContentList \}/);
   assert.match(
     dashboardPageSource,
-    /<StatsCards \/>\s*<CreatedContentList \/>/,
+    /<TabsContent value="created"[^>]*>\s*<CreatedContentList \/>/,
   );
+  assert.ok(dashboardPageSource.indexOf("<StatsCards />") < dashboardPageSource.indexOf('<TabsContent value="created"'));
 });
 
 test("created content list fetches only the current user's created banks", () => {

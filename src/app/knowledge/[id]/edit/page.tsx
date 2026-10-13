@@ -28,6 +28,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
+import { DepartmentSelector, type SelectedDepartment } from "@/components/bank/department-selector";
+
 type BankVisibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
 
 interface KnowledgePoint {
@@ -43,6 +45,7 @@ interface KnowledgeBank {
   creatorId: string;
   visibility: BankVisibility;
   visibleDepartments: string[];
+  visibleDepartmentNames?: string[];
   generationPrompt: string | null;
   points: KnowledgePoint[];
 }
@@ -91,8 +94,7 @@ export default function EditKnowledgeBankPage({
   const [savingTitle, setSavingTitle] = React.useState(false);
   const [editVisibility, setEditVisibility] =
     React.useState<BankVisibility>("PRIVATE");
-  const [editDepartments, setEditDepartments] = React.useState<string[]>([]);
-  const [deptDraft, setDeptDraft] = React.useState("");
+  const [editDepartments, setEditDepartments] = React.useState<SelectedDepartment[]>([]);
   const [savingVisibility, setSavingVisibility] = React.useState(false);
 
   const isCreator =
@@ -113,7 +115,7 @@ export default function EditKnowledgeBankPage({
       setPrompt(data.generationPrompt || DEFAULT_KNOWLEDGE_CARD_PROMPT);
       setEditVisibility(data.visibility ?? "PRIVATE");
       setEditDepartments(
-        Array.isArray(data.visibleDepartments) ? data.visibleDepartments : [],
+        Array.isArray(data.visibleDepartments) ? data.visibleDepartments.map((id: string, index: number) => ({ id, name: data.visibleDepartmentNames?.[index] || id })) : [],
       );
       setEditing(
         Object.fromEntries(
@@ -171,16 +173,6 @@ export default function EditKnowledgeBankPage({
     }
   };
 
-  const addDepartment = () => {
-    const value = deptDraft.trim();
-    if (!value) return;
-    if (editDepartments.includes(value)) {
-      toast.error("该部门已添加");
-      return;
-    }
-    setEditDepartments((prev) => [...prev, value]);
-    setDeptDraft("");
-  };
 
   const saveVisibility = async () => {
     if (!bank) return;
@@ -196,7 +188,8 @@ export default function EditKnowledgeBankPage({
         body: JSON.stringify({
           visibility: editVisibility,
           visibleDepartments:
-            editVisibility === "PARTIAL" ? editDepartments : [],
+            editVisibility === "PARTIAL" ? editDepartments.map(item => item.id) : [],
+          visibleDepartmentNames: editVisibility === "PARTIAL" ? editDepartments.map(item => item.name) : [],
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -212,7 +205,8 @@ export default function EditKnowledgeBankPage({
               visibility: data.visibility ?? editVisibility,
               visibleDepartments: Array.isArray(data.visibleDepartments)
                 ? data.visibleDepartments
-                : editDepartments,
+                : editDepartments.map(item => item.id),
+              visibleDepartmentNames: editDepartments.map(item => item.name),
             }
           : prev,
       );
@@ -787,44 +781,7 @@ export default function EditKnowledgeBankPage({
                     {editVisibility === "PARTIAL" && (
                       <div className="min-w-0 flex-1 space-y-2">
                         <Label>可访问部门</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            value={deptDraft}
-                            onChange={(event) => setDeptDraft(event.target.value)}
-                            placeholder="部门名称"
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                addDepartment();
-                              }
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={addDepartment}
-                          >
-                            添加
-                          </Button>
-                        </div>
-                        {editDepartments.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {editDepartments.map((department) => (
-                              <Badge
-                                key={department}
-                                variant="secondary"
-                                className="cursor-pointer font-normal"
-                                onClick={() =>
-                                  setEditDepartments((prev) =>
-                                    prev.filter((item) => item !== department),
-                                  )
-                                }
-                              >
-                                {department} x
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
+                        <DepartmentSelector value={editDepartments} onChange={setEditDepartments} disabled={savingVisibility} />
                       </div>
                     )}
                   </div>

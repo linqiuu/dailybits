@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
+import { canAccessBank, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -17,10 +17,13 @@ export async function POST(
 
     const exists = await prisma.comment.findUnique({
       where: { id: commentId },
-      select: { id: true },
+      select: { id: true, bank: true },
     });
     if (!exists) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+    if (!canAccessBank(exists.bank, session)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const result = await prisma.$transaction(async (tx) => {

@@ -27,7 +27,8 @@ export async function resolveDigestReceiver(
     where: { id: targetId },
     select: { uid: true },
   });
-  return user?.uid ?? targetId;
+  if (!user?.uid) throw new Error("RECIPIENT_UNAVAILABLE");
+  return user.uid;
 }
 
 export async function pushDigestToTarget(payload: DigestPushPayload): Promise<boolean> {
@@ -116,7 +117,7 @@ export function isActiveDigestFetchFailureCache(
   return Number.isFinite(retryAfterMs) && retryAfterMs > now.getTime();
 }
 
-function parseCachedItems(items: unknown): string[] | null {
+export function parseCachedItems(items: unknown): string[] | null {
   if (!Array.isArray(items)) return null;
   const normalized = items.filter((item): item is string => typeof item === "string");
   if (normalized.length !== items.length) return null;

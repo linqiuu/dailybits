@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { selectQuestion } from "@/lib/push/selector";
 import { pushToTarget } from "@/lib/push/adapter";
 import { buildPayload } from "@/lib/push/payload";
+import { getCurrentSession, isAdminSession } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV !== "development") {
@@ -10,6 +11,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (!isAdminSession(await getCurrentSession())) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const { targetType = "USER", targetId, bankId } = body as {
       targetType?: "USER" | "GROUP";
@@ -57,10 +61,11 @@ export async function POST(request: NextRequest) {
         where: { id: subscription.targetId },
         select: { uid: true, name: true },
       });
-      receiver = user?.uid ?? subscription.targetId;
+      if (!user?.uid) return NextResponse.json({ error: "Recipient UID missing" }, { status: 400 });
+      receiver = user.uid;
     }
 
-    const payload = buildPayload(receiver, subscription.bank.title, question);
+    const payload = buildPayload(receiver, subscription.bank.title, question, { authorId: subscription.bank.creatorId, businessId: question.id });
     const success = await pushToTarget(payload);
 
     if (success) {
@@ -69,6 +74,9 @@ export async function POST(request: NextRequest) {
           targetType: subscription.targetType,
           targetId: subscription.targetId,
           questionId: question.id,
+          subscriptionId: subscription.id,
+          cycle: subscription.currentCycle,
+          generation: subscription.generation,
         },
       });
       return NextResponse.json({

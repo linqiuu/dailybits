@@ -6,7 +6,7 @@
 
 DailyBits is a user-facing learning website, not an operations console. The interface should feel like a polished daily discovery desk: users find useful material, subscribe to a rhythm, create their own banks, and check progress without reading documentation.
 
-The current visual direction is content-first light tech. It uses clear white work surfaces, ink active states, cobalt focus, restrained environment light, floating navigation, and compact content cards that behave like scheduled learning packets. The home page avoids decorative hero graphics and immediately exposes the channel switcher, search, and live content stream.
+The visual direction is compact, content-first learning. White surfaces, cobalt actions and teal accents provide clear hierarchy without glowing backgrounds. Navigation is a stable top bar, content sections are unframed, cards use 8px corners and inline metadata. Discovery starts with channel tabs and the real catalogue, not a decorative hero.
 
 ## Tokens
 
@@ -19,10 +19,11 @@ The current visual direction is content-first light tech. It uses clear white wo
 
 ## Components
 
-- `Header`: floating brand chip plus navigation pill, preserving the existing IA while making the app feel lighter.
+- `Header`: stable top navigation with a recognizable brand and predictable actions.
 - `HomeFrame`: compact command bar plus horizontal channel switcher, with real content directly below.
-- `PageHeader`: broad page intro surface for creator, dashboard, admin, and preview pages.
-- `WorkbenchPanel`: reusable framed work surface for forms, subscriptions, previews, and history.
+- `PageHeader`: unframed, concise heading and actions.
+- `WorkbenchPanel`: unframed content section; only repeated items and actual tools get cards.
+- `RequestState`, `AuthenticationState`: explicit loading, retry, login and permission states.
 - `MetricLine`: dashboard and admin summary cells.
 - `content-card`, `stream-toolbar`, `empty-slate`: shared classes for discovery cards, search bars, and empty states.
 
@@ -30,15 +31,16 @@ Base controls continue to use the existing shadcn/Base UI stack. Icons use `luci
 
 ## Motion
 
-Motion is intentionally small but visible: page entry and card lift only. Reduced motion users get animations disabled through `prefers-reduced-motion`.
+Motion is restrained to page entry and control state transitions. Cards do not lift or resize on hover. Reduced motion is respected.
 
 ## Page Coverage
 
 - Home: compact command bar, my-content action, create menu, horizontal channel tabs, search, content cards, and compact empty states.
-- Dashboard: user content center with stats, created content, digest subscription, personal subscriptions, and push history.
+- Dashboard: compact stats and separate tabs for subscriptions, created content and history.
 - Create question bank and create knowledge bank: form plus live summary panel.
-- Detail and edit pages: stronger editor hero surfaces and consistent work panels.
-- Digest preview: messaging card stream with paged Markdown examples and a compact advice rail.
+- Detail and edit pages: aligned columns with non-stretching subscription controls and compact editor headers.
+- Digest preview: cached real content rendered by react-markdown/remark-gfm using the exact Messaging payload formatter. No fictional card actions or fabricated samples.
+- Admin: Recharts trends, answer/subscription rankings, explicit permission/error states and delivery health.
 - Admin overview and group page: same headers, panels, metrics, and overflow behavior.
 
 ## Boundaries

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentSession, isAdminSession } from "@/lib/auth";
 import { getAiNewsDigestCacheDate } from "@/lib/digest/sources";
 import {
   SUBSCRIBABLE_DIGEST_TYPES,
@@ -19,6 +20,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (!isAdminSession(await getCurrentSession())) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const {
       digestType = "GITHUB_TRENDING",

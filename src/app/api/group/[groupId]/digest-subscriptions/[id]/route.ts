@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizeSubscriptionActor } from "@/lib/subscriptions/authorization";
 import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
 
 type RouteContext = { params: Promise<{ groupId: string; id: string }> };
@@ -12,7 +13,7 @@ function parsePushTimes(value: unknown): string[] | NextResponse {
     );
   }
   const validTimes = value.filter(
-    (time) => typeof time === "string" && /^\d{2}:\d{2}$/.test(time),
+    (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time),
   );
   if (validTimes.length === 0) {
     return NextResponse.json(
@@ -45,6 +46,8 @@ async function findGroupDigestSubscription(id: string, groupId: string) {
   if (subscription.targetType !== "GROUP" || subscription.targetId !== groupId) {
     return { error: "Forbidden", status: 403, subscription: null };
   }
+  const denied = await authorizeSubscriptionActor(subscription);
+  if (denied) return { ...denied, subscription: null };
   return { error: null, status: 200, subscription };
 }
 

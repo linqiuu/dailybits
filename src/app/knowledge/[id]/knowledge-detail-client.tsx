@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MarkdownContent } from "@/components/ui/markdown-content";
+import { X } from "lucide-react";
+import { isValidPushTime } from "@/lib/subscriptions/schedule";
 import {
   Dialog,
   DialogContent,
@@ -63,7 +66,7 @@ export function KnowledgeDetailClient({
 
   const addTime = () => {
     const val = newTime.trim();
-    if (!/^\d{2}:\d{2}$/.test(val)) {
+    if (!isValidPushTime(val)) {
       toast.error("请输入有效的 HH:MM 格式时间");
       return;
     }
@@ -79,12 +82,13 @@ export function KnowledgeDetailClient({
     }
     setLoading(true);
     try {
+      const editing = !!subscription?.id && subscribed;
       const res = await fetch(
-        subscription?.id
+        editing
           ? `/api/knowledge-subscriptions/${subscription.id}`
           : "/api/knowledge-subscriptions",
         {
-          method: subscription?.id ? "PATCH" : "POST",
+          method: editing ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bankId: bank.id, pushTimes }),
         },
@@ -94,7 +98,7 @@ export function KnowledgeDetailClient({
         toast.error(data.error ?? "保存失败");
         return;
       }
-      toast.success(subscription?.id ? "推送时间已更新" : "订阅成功");
+      toast.success(editing ? "推送时间已更新" : "订阅成功");
       setSubscribed(true);
       setDialogOpen(false);
       router.refresh();
@@ -148,9 +152,9 @@ export function KnowledgeDetailClient({
   return (
     <div className="space-y-5">
       <WorkbenchPanel className="editor-hero" padded={false}>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-row items-start justify-between gap-4 p-0">
           <div className="space-y-1">
-            <CardTitle className="text-2xl font-semibold">{bank.title}</CardTitle>
+            <h1 className="text-2xl font-semibold">{bank.title}</h1>
             {bank.description ? (
               <p className="text-sm text-muted-foreground">{bank.description}</p>
             ) : null}
@@ -165,7 +169,6 @@ export function KnowledgeDetailClient({
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                 render={<Link href={`/knowledge/${bank.id}/edit`} />}
                 nativeButton={false}
               >
@@ -179,11 +182,11 @@ export function KnowledgeDetailClient({
         </CardHeader>
       </WorkbenchPanel>
 
-      <Card className="content-card border-primary/20 bg-card/85">
-        <CardHeader>
+      <section className="border-y py-4">
+        <CardHeader className="px-0">
           <CardTitle className="text-lg font-semibold">每日知识卡片推送</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <CardContent className="mt-3 flex flex-wrap items-center justify-between gap-3 px-0">
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
               每次推送一张 Markdown 知识卡片，按顺序发送，推完后从头循环。
@@ -215,6 +218,7 @@ export function KnowledgeDetailClient({
                       <Label>每日推送时间</Label>
                       <div className="flex gap-2">
                         <Input
+                          aria-label="新增知识卡片推送时间"
                           type="time"
                           value={newTime}
                           onChange={(event) => setNewTime(event.target.value)}
@@ -229,12 +233,13 @@ export function KnowledgeDetailClient({
                       {pushTimes.map((time) => (
                         <Badge
                           key={time}
+                          render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
                           className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
                           onClick={() =>
                             setPushTimes((prev) => prev.filter((item) => item !== time))
                           }
                         >
-                          {time} ×
+                          {time}<X className="size-3" aria-hidden />
                         </Badge>
                       ))}
                     </div>
@@ -261,18 +266,18 @@ export function KnowledgeDetailClient({
             ) : null}
           </div>
         </CardContent>
-      </Card>
+      </section>
 
-      <Card className="content-card">
-        <CardHeader>
-          <CardTitle className="font-semibold">
+      <section>
+        <CardHeader className="px-0">
+          <h2 className="text-lg font-semibold">
             知识卡片列表
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               共 {bank.pointCount} 条
             </span>
-          </CardTitle>
+          </h2>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="mt-4 space-y-3 px-0">
           {bank.points.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">
               暂无知识卡片，创建者添加后即可推送
@@ -280,12 +285,10 @@ export function KnowledgeDetailClient({
           ) : (
             <>
               {paginatedPoints.items.map((point) => (
-                <div key={point.id} className="rounded-lg border bg-card/80 p-3">
+                <article key={point.id} className="max-w-4xl border-b py-4 last:border-0">
                   <p className="mb-2 text-xs text-muted-foreground">#{point.displayIndex}</p>
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {point.content}
-                  </pre>
-                </div>
+                  <MarkdownContent>{point.content}</MarkdownContent>
+                </article>
               ))}
               {paginatedPoints.totalPages > 1 ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -319,7 +322,7 @@ export function KnowledgeDetailClient({
             </>
           )}
         </CardContent>
-      </Card>
+      </section>
     </div>
   );
 }

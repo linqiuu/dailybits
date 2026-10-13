@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getCurrentSession } from "@/lib/auth";
+import { getCurrentSession, getSessionDepartmentKeys } from "@/lib/auth";
 import { canAccessKnowledgeBank } from "@/lib/knowledge/access";
 import { prisma } from "@/lib/prisma";
 import { KnowledgeDetailClient } from "./knowledge-detail-client";
@@ -25,7 +25,7 @@ export default async function KnowledgeBankPage({
   });
 
   if (!bank) notFound();
-  const allowed = await canAccessKnowledgeBank(bank, session?.user?.id);
+  const allowed = await canAccessKnowledgeBank(bank, session?.user?.id, await getSessionDepartmentKeys(session));
   if (!allowed) notFound();
 
   const subscription = session?.user?.id

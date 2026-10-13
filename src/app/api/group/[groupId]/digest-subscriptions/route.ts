@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
+import { canManageSubscription } from "@/lib/content/access";
 import {
   SUBSCRIBABLE_DIGEST_TYPES,
   isSubscribableDigestType,
@@ -30,7 +31,7 @@ function parsePushTimes(value: unknown): string[] | NextResponse {
       ? value
       : DEFAULT_DIGEST_PUSH_TIMES;
   const validTimes = times.filter(
-    (time) => typeof time === "string" && /^\d{2}:\d{2}$/.test(time),
+    (time) => typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time),
   );
 
   if (validTimes.length === 0) {
@@ -60,12 +61,15 @@ export async function GET(
 ) {
   try {
     const { groupId } = await context.params;
+    const session = await getCurrentSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const [subscriptions, countRows] = await Promise.all([
       prisma.digestSubscription.findMany({
         where: {
           targetType: "GROUP",
           targetId: groupId,
           isActive: true,
+          ...(!session.user.isAdmin ? { subscriberId: session.user.id } : {}),
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -119,6 +123,7 @@ export async function POST(
       },
     });
     if (existing) {
+      if (!canManageSubscription(existing, session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const reuse = getSubscriptionReuseAction(existing);
       if (reuse.action === "conflict") {
         return NextResponse.json(
@@ -144,13 +149,6 @@ export async function POST(
             isActive: true,
             pushTimes,
             subscriberId: session.user.id,
-          },
-        }),
-        prisma.digestPushLog.deleteMany({
-          where: {
-            targetType: "GROUP",
-            targetId: groupId,
-            digestType,
           },
         }),
       ]);

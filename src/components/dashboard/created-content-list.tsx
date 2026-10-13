@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BookMarked, BookOpen, CheckCircle2, Eye, Pencil, Users } from "lucide-react";
+import { BookMarked, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, Pencil, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RequestState } from "@/components/ui/request-state";
 import {
   Tabs,
   TabsContent,
@@ -41,6 +42,8 @@ interface CreatedKnowledgeBank {
 
 interface ApiResponse<T> {
   banks?: T[];
+  total?: number;
+  totalPages?: number;
 }
 
 const VISIBILITY_LABELS: Record<Visibility, string> = {
@@ -53,6 +56,7 @@ function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     month: "2-digit",
     day: "2-digit",
   }).format(date);
@@ -67,15 +71,21 @@ export function CreatedContentList() {
   const [knowledgeBanks, setKnowledgeBanks] = useState<CreatedKnowledgeBank[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [questionPage, setQuestionPage] = useState(1);
+  const [knowledgePage, setKnowledgePage] = useState(1);
+  const [activeTab, setActiveTab] = useState("question-banks");
+  const [reload, setReload] = useState(0);
+  const [counts, setCounts] = useState({ questions: 0, knowledge: 0, questionPages: 1, knowledgePages: 1 });
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCreatedContent() {
+      setLoading(true);
       try {
         const [questionRes, knowledgeRes] = await Promise.all([
-          fetch("/api/banks?owner=mine"),
-          fetch("/api/knowledge-banks?owner=mine"),
+          fetch(`/api/banks?owner=mine&page=${questionPage}`),
+          fetch(`/api/knowledge-banks?owner=mine&page=${knowledgePage}`),
         ]);
         const [questionData, knowledgeData] = await Promise.all([
           questionRes.json(),
@@ -91,6 +101,7 @@ export function CreatedContentList() {
         setKnowledgeBanks(
           hasBanks<CreatedKnowledgeBank>(knowledgeData) ? knowledgeData.banks ?? [] : [],
         );
+        setCounts({ questions: questionData.total ?? 0, knowledge: knowledgeData.total ?? 0, questionPages: questionData.totalPages || 1, knowledgePages: knowledgeData.totalPages || 1 });
         setFailed(false);
       } catch {
         if (!cancelled) setFailed(true);
@@ -99,15 +110,16 @@ export function CreatedContentList() {
       }
     }
 
-    loadCreatedContent();
+    const timer = window.setTimeout(() => void loadCreatedContent(), 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, []);
+  }, [questionPage, knowledgePage, reload]);
 
   const totalCount = useMemo(
-    () => questionBanks.length + knowledgeBanks.length,
-    [knowledgeBanks.length, questionBanks.length],
+    () => counts.questions + counts.knowledge,
+    [counts],
   );
 
   if (loading) {
@@ -133,10 +145,9 @@ export function CreatedContentList() {
     return (
       <section className="space-y-4">
         <h2 className="panel-title text-lg">我创建的</h2>
-        <EmptyState
+        <RequestState
           title="创建内容加载失败"
-          description="稍后刷新页面重试。"
-          illustration="book"
+          onRetry={() => setReload(value => value + 1)}
         />
       </section>
     );
@@ -153,13 +164,13 @@ export function CreatedContentList() {
         </div>
       </div>
 
-      <Tabs defaultValue="question-banks" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid h-10 w-full max-w-sm grid-cols-2 gap-1 p-1">
           <TabsTrigger value="question-banks" className="h-8 min-w-0 px-3">
-            题库 {questionBanks.length}
+            题库 {counts.questions}
           </TabsTrigger>
           <TabsTrigger value="knowledge-banks" className="h-8 min-w-0 px-3">
-            知识库 {knowledgeBanks.length}
+            知识库 {counts.knowledge}
           </TabsTrigger>
         </TabsList>
 
@@ -193,6 +204,7 @@ export function CreatedContentList() {
               action={{ label: "创建题库", href: "/bank/new" }}
             />
           )}
+          <CreatedPager page={questionPage} pages={counts.questionPages} onChange={setQuestionPage} />
         </TabsContent>
 
         <TabsContent value="knowledge-banks">
@@ -222,10 +234,20 @@ export function CreatedContentList() {
               action={{ label: "创建知识库", href: "/knowledge/new" }}
             />
           )}
+          <CreatedPager page={knowledgePage} pages={counts.knowledgePages} onChange={setKnowledgePage} />
         </TabsContent>
       </Tabs>
     </section>
   );
+}
+
+function CreatedPager({ page, pages, onChange }: { page: number; pages: number; onChange: (page: number) => void }) {
+  if (pages <= 1) return null;
+  return <div className="mt-4 flex items-center justify-end gap-3">
+    <span className="text-xs text-muted-foreground">{page} / {pages}</span>
+    <Button variant="outline" size="icon-sm" title="上一页" aria-label="上一页创建内容" disabled={page <= 1} onClick={() => onChange(page - 1)}><ChevronLeft className="size-4" /></Button>
+    <Button variant="outline" size="icon-sm" title="下一页" aria-label="下一页创建内容" disabled={page >= pages} onClick={() => onChange(page + 1)}><ChevronRight className="size-4" /></Button>
+  </div>;
 }
 
 function CreatedItemCard({

@@ -66,12 +66,12 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
 
   return (
     <>
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <WorkbenchPanel className="editor-hero" padded={false}>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 p-0">
             <div className="min-w-0 space-y-3">
               <div className="space-y-1">
-                <CardTitle className="text-2xl">{bank.title}</CardTitle>
+                <h1 className="text-2xl font-semibold">{bank.title}</h1>
                 {bank.description ? (
                   <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
                     {bank.description}
@@ -98,7 +98,7 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                className=""
                 render={<Link href={`/bank/${bank.id}/edit`} />}
                 nativeButton={false}
               >

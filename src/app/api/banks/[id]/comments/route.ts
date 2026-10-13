@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
+import { canAccessBank, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -67,11 +67,12 @@ export async function GET(
 
     const bank = await prisma.questionBank.findUnique({
       where: { id: bankId },
-      select: { id: true },
     });
     if (!bank) {
       return NextResponse.json({ error: "Bank not found" }, { status: 404 });
     }
+    const viewer = await getCurrentSession();
+    if (!canAccessBank(bank, viewer)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { searchParams } = new URL(request.url);
     const sort = parseSort(searchParams.get("sort"));
@@ -187,11 +188,11 @@ export async function POST(
 
     const bank = await prisma.questionBank.findUnique({
       where: { id: bankId },
-      select: { id: true },
     });
     if (!bank) {
       return NextResponse.json({ error: "Bank not found" }, { status: 404 });
     }
+    if (!canAccessBank(bank, session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = (await request.json()) as {
       content?: unknown;

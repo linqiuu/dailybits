@@ -1,5 +1,5 @@
-import { getUserDepartments } from "@/lib/getUserDepartments";
 import { prisma } from "@/lib/prisma";
+import { canReadContent } from "../content/access";
 
 export const KNOWLEDGE_VISIBILITY_VALUES = ["PRIVATE", "PUBLIC", "PARTIAL"] as const;
 
@@ -28,8 +28,7 @@ export async function canAccessKnowledgeBank(
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { uid: true },
+    select: { departmentIds: true },
   });
-  const departments = await getUserDepartments(user?.uid);
-  return departments.some((department) => bank.visibleDepartments.includes(department));
+  return canReadContent(bank, userId, user?.departmentIds);
 }

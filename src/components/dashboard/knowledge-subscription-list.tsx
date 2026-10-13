@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RequestState } from "@/components/ui/request-state";
 
 interface KnowledgeSubscriptionItem {
   id: string;
@@ -21,14 +22,21 @@ interface KnowledgeSubscriptionItem {
 export function KnowledgeSubscriptionList() {
   const [subscriptions, setSubscriptions] = useState<KnowledgeSubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    try {
     const res = await fetch("/api/knowledge-subscriptions/mine");
+    if (!res.ok) throw new Error("Unavailable");
     const data = await res.json();
     if (Array.isArray(data)) {
       setSubscriptions(data);
-    }
+    } else throw new Error("Invalid response");
+    } catch { setFailed(true); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -75,6 +83,7 @@ export function KnowledgeSubscriptionList() {
     );
   }
 
+  if (failed) return <RequestState title="知识卡片订阅暂时加载失败" onRetry={() => void refresh()} />;
   if (subscriptions.length === 0) {
     return (
       <div className="space-y-4">

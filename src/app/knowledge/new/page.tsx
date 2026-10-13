@@ -18,6 +18,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader, WorkbenchPanel } from "@/components/ui/workbench";
 
+import { DepartmentSelector, type SelectedDepartment } from "@/components/bank/department-selector";
+
 type Visibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
 
 const VISIBILITY_LABELS: Record<Visibility, string> = {
@@ -37,26 +39,15 @@ export default function NewKnowledgeBankPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("PRIVATE");
-  const [visibleDepartments, setVisibleDepartments] = useState<string[]>([]);
-  const [deptInput, setDeptInput] = useState("");
+  const [departments, setDepartments] = useState<SelectedDepartment[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const titlePreview = title.trim() || "未命名知识库";
   const departmentSummary = useMemo(() => {
     if (visibility !== "PARTIAL") return VISIBILITY_SUMMARY[visibility];
-    return visibleDepartments.length ? visibleDepartments.join("、") : "尚未添加部门";
-  }, [visibleDepartments, visibility]);
+    return departments.length ? departments.map(item => item.name).join("、") : "尚未选择部门";
+  }, [departments, visibility]);
 
-  const addDepartment = () => {
-    const value = deptInput.trim();
-    if (!value) return;
-    if (visibleDepartments.includes(value)) {
-      toast.error("该部门已添加");
-      return;
-    }
-    setVisibleDepartments((prev) => [...prev, value]);
-    setDeptInput("");
-  };
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -64,7 +55,7 @@ export default function NewKnowledgeBankPage() {
       toast.error("请输入知识库标题");
       return;
     }
-    if (visibility === "PARTIAL" && visibleDepartments.length === 0) {
+    if (visibility === "PARTIAL" && departments.length === 0) {
       toast.error("部分可见时请至少添加一个部门");
       return;
     }
@@ -78,7 +69,8 @@ export default function NewKnowledgeBankPage() {
           description: description.trim() || undefined,
           visibility,
           visibleDepartments:
-            visibility === "PARTIAL" ? visibleDepartments : undefined,
+            visibility === "PARTIAL" ? departments.map(item => item.id) : [],
+          visibleDepartmentNames: visibility === "PARTIAL" ? departments.map(item => item.name) : [],
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -166,43 +158,7 @@ export default function NewKnowledgeBankPage() {
                 <Building2 className="size-4 text-primary" aria-hidden />
                 <h2 className="text-base font-semibold">部门范围</h2>
               </div>
-              <p className="text-sm text-muted-foreground">
-                指定可访问的部门名称，需与用户侧部门匹配。
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={deptInput}
-                  onChange={(event) => setDeptInput(event.target.value)}
-                  placeholder="部门名称"
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addDepartment();
-                    }
-                  }}
-                />
-                <Button type="button" variant="secondary" onClick={addDepartment}>
-                  添加
-                </Button>
-              </div>
-              {visibleDepartments.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {visibleDepartments.map((department) => (
-                    <Badge
-                      key={department}
-                      variant="secondary"
-                      className="cursor-pointer font-normal"
-                      onClick={() =>
-                        setVisibleDepartments((prev) =>
-                          prev.filter((item) => item !== department),
-                        )
-                      }
-                    >
-                      {department} x
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
+              <DepartmentSelector value={departments} onChange={setDepartments} disabled={submitting} />
             </section>
           ) : null}
         </WorkbenchPanel>

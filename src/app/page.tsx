@@ -70,12 +70,9 @@ export default function Home() {
       <section className="home-frame">
         <div className="home-command">
           <div className="min-w-0">
-            <h1 className="text-3xl font-semibold leading-[1.04] text-foreground sm:text-4xl">
+            <h1 className="text-2xl font-semibold leading-tight text-foreground">
               发现
             </h1>
-            <p className="mt-2 max-w-xl text-base leading-6 text-muted-foreground">
-              订阅题库、知识卡片和 AI 资讯，到点推送。
-            </p>
           </div>
           <div className="home-actions">
             <Button

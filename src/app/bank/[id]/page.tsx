@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getCurrentSession } from "@/lib/auth";
+import { canAccessBank, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BankDetailClient } from "./bank-detail-client";
 import { SubscriptionPanel } from "@/components/bank/subscription-panel";
@@ -27,7 +27,7 @@ export default async function BankDetailPage({ params }: PageProps) {
     },
   });
 
-  if (!bank) {
+  if (!bank || !canAccessBank(bank, session)) {
     notFound();
   }
 
@@ -96,8 +96,8 @@ export default async function BankDetailPage({ params }: PageProps) {
           subscriptionWeekdays: bank.subscriptionWeekdays,
           subscriptionPushTimes: bank.subscriptionPushTimes,
           creator: bank.creator,
-          questions: bank.questions,
-          questionCount: bank._count.questions,
+          questions: bank.questions.filter((question) => isCreator || question.status === "PUBLISHED"),
+          questionCount: bank.questions.filter((question) => isCreator || question.status === "PUBLISHED").length,
         }}
         isCreator={isCreator}
         subscriptionSlot={

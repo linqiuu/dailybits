@@ -8,6 +8,7 @@ import { BankCard } from "./bank-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
 import { Search } from "lucide-react";
+import { RequestState } from "@/components/ui/request-state";
 
 interface Bank {
   id: string;
@@ -126,11 +127,7 @@ export function BankExplorer({
       {loading ? (
         <SkeletonCardGrid />
       ) : error ? (
-        <EmptyState
-          title="题库暂时加载失败"
-          description="稍后刷新页面，或联系管理员检查数据服务状态。"
-          variant={emptyVariant}
-        />
+        <RequestState title="题库暂时加载失败" onRetry={fetchBanks} />
       ) : data?.banks.length ? (
         <>
           <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">

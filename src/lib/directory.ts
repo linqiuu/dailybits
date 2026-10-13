@@ -73,6 +73,7 @@ export async function searchDirectoryDepartments(
 ): Promise<DirectoryDepartmentSearchResponse> {
   const q = query.trim();
   if (!q) return { items: [] };
+  if (q.length > 128) throw new Error("Department query exceeds 128 characters");
 
   const url = new URL("/directory/v1/departments/search", directoryBaseUrl());
   url.searchParams.set("q", q);
@@ -80,12 +81,11 @@ export async function searchDirectoryDepartments(
     method: "GET",
     headers: directoryHeaders(),
     cache: "no-store",
+    signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
     throw new Error(
-      `Directory search failed: HTTP ${response.status}` +
-        (body ? ` ${body.slice(0, 200)}` : ""),
+      `Directory search failed: HTTP ${response.status}`,
     );
   }
 

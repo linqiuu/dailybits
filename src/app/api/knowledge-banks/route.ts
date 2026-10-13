@@ -10,7 +10,8 @@ type VisibilityValue = (typeof VISIBILITY_VALUES)[number];
 function parseVisibilityBody(body: {
   visibility?: unknown;
   visibleDepartments?: unknown;
-}): { visibility: VisibilityValue; visibleDepartments: string[] } | NextResponse {
+  visibleDepartmentNames?: unknown;
+}): { visibility: VisibilityValue; visibleDepartments: string[]; visibleDepartmentNames: string[] } | NextResponse {
   let visibility: VisibilityValue = "PRIVATE";
   if (body.visibility !== undefined) {
     if (
@@ -51,7 +52,11 @@ function parseVisibilityBody(body: {
     );
   }
 
-  return { visibility, visibleDepartments };
+  const names = body.visibleDepartmentNames;
+  if (names !== undefined && (!Array.isArray(names) || names.length !== visibleDepartments.length || names.some((name) => typeof name !== "string" || !name.trim()))) {
+    return NextResponse.json({ error: "visibleDepartmentNames must align with visibleDepartments" }, { status: 400 });
+  }
+  return { visibility, visibleDepartments, visibleDepartmentNames: Array.isArray(names) ? names.map((name: string) => name.trim()) : [] };
 }
 
 async function getVisibilityWhere(
@@ -203,6 +208,7 @@ export async function POST(request: NextRequest) {
         creatorId: session.user.id,
         visibility: parsed.visibility,
         visibleDepartments: parsed.visibleDepartments,
+        visibleDepartmentNames: parsed.visibleDepartmentNames,
         generationPrompt:
           typeof generationPrompt === "string" && generationPrompt.trim()
             ? generationPrompt.trim()

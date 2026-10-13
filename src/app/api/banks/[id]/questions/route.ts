@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
+import { canAccessBank, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, QuestionStatus } from "@/generated/prisma/client";
 
@@ -60,8 +60,15 @@ export async function GET(
     return NextResponse.json({ error: "Bank not found" }, { status: 404 });
   }
 
+  const session = await getCurrentSession();
+  if (!canAccessBank(bank, session)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const where: { bankId: string; status?: QuestionStatus } = { bankId };
-  if (status === "DRAFT" || status === "PUBLISHED") {
+  if (session?.user.id !== bank.creatorId) {
+    where.status = "PUBLISHED";
+  } else if (status === "DRAFT" || status === "PUBLISHED") {
     where.status = status;
   }
 

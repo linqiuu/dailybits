@@ -6,6 +6,7 @@ import {
   type KnowledgeVisibility,
 } from "@/lib/knowledge/access";
 import { prisma } from "@/lib/prisma";
+import { canManageSubscription } from "@/lib/content/access";
 
 function parseVisibility(value: unknown): KnowledgeVisibility | NextResponse | undefined {
   if (value === undefined) return undefined;
@@ -76,7 +77,7 @@ export async function GET(
     return NextResponse.json({
       ...bank,
       pointCount: bank._count.points,
-      subscription,
+      subscription: subscription && canManageSubscription(subscription, session?.user) ? subscription : null,
     });
   } catch (error) {
     console.error("[GET /api/knowledge-banks/[id]]", error);
@@ -111,6 +112,7 @@ export async function PATCH(
       description?: string | null;
       visibility?: KnowledgeVisibility;
       visibleDepartments?: string[];
+      visibleDepartmentNames?: string[];
       generationPrompt?: string | null;
     } = {};
 
@@ -163,6 +165,13 @@ export async function PATCH(
     }
     if ((data.visibility ?? bank.visibility) !== "PARTIAL") {
       data.visibleDepartments = [];
+      data.visibleDepartmentNames = [];
+    } else if (body.visibleDepartmentNames !== undefined) {
+      const names = body.visibleDepartmentNames;
+      if (!Array.isArray(names) || names.length !== (data.visibleDepartments ?? bank.visibleDepartments).length || names.some((name: unknown) => typeof name !== "string" || !name.trim())) {
+        return NextResponse.json({ error: "visibleDepartmentNames must align with visibleDepartments" }, { status: 400 });
+      }
+      data.visibleDepartmentNames = names.map((name: string) => name.trim());
     }
 
     const updated = await prisma.knowledgeBank.update({

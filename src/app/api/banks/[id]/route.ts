@@ -47,6 +47,7 @@ export async function GET(
           select: { id: true, name: true, image: true, uid: true },
         },
         questions: {
+          where: { status: "PUBLISHED" },
           orderBy: { createdAt: "asc" },
         },
         _count: {
@@ -72,6 +73,9 @@ export async function GET(
     );
     if (!allowed) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (session?.user.id === bank.creatorId) {
+      bank.questions = await prisma.question.findMany({ where: { bankId: id }, orderBy: { createdAt: "asc" } });
     }
 
     let subscription = null;

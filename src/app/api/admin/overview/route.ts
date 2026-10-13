@@ -1,179 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminSession, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { calendarRange, dateKey, DISPLAY_TIMEZONE } from "@/lib/time";
+import { validatePushConfiguration } from "@/lib/push/adapter";
 
 export const dynamic = "force-dynamic";
-
-const DEFAULT_TIMEZONE = "Asia/Shanghai";
-
-function clampDays(value: string | null): number {
-  const parsed = Number(value ?? 7);
-  if (!Number.isFinite(parsed)) return 7;
-  return Math.max(1, Math.min(90, Math.trunc(parsed)));
-}
-
-function dayKey(date: Date, timeZone = DEFAULT_TIMEZONE): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function pct(part: number, total: number): number {
-  return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
-}
+function pct(part: number, total: number) { return total ? Math.round(part / total * 1000) / 10 : 0; }
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getCurrentSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!isAdminSession(session)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const days = clampDays(request.nextUrl.searchParams.get("days"));
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isAdminSession(session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const rawDays = Number(request.nextUrl.searchParams.get("days") ?? 7);
+    const days = Number.isFinite(rawDays) ? Math.max(1, Math.min(90, Math.trunc(rawDays))) : 7;
     const now = new Date();
-    const since = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
-
-    const [
-      questionBankCount,
-      knowledgeBankCount,
-      questionCount,
-      knowledgePointCount,
-      activeSubscriptionCount,
-      allSubscriptionCount,
-      periodEvents,
-    ] = await Promise.all([
-      prisma.questionBank.count(),
-      prisma.knowledgeBank.count(),
-      prisma.question.count(),
-      prisma.knowledgePoint.count(),
-      prisma.subscription.count({ where: { isActive: true } }),
-      prisma.subscription.count(),
-      prisma.questionAnswerEvent.findMany({
-        where: { answeredAt: { gte: since } },
-        select: {
-          bankId: true,
-          respondentId: true,
-          isCorrect: true,
-          answeredAt: true,
-          bank: {
-            select: {
-              id: true,
-              title: true,
-              subscriberCount: true,
-              _count: { select: { questions: true } },
-            },
-          },
-        },
-      }),
+    const { start, end } = calendarRange(now, days);
+    const [questionBankCount, knowledgeBankCount, questionCount, knowledgePointCount, subscriptions, dailyRows, bankRows, answerers, states, jobCounts, failures, caches, mostSubscribed] = await Promise.all([
+      prisma.questionBank.count(), prisma.knowledgeBank.count(), prisma.question.count(), prisma.knowledgePoint.count(),
+      Promise.all([
+        prisma.subscription.count(), prisma.knowledgeSubscription.count(), prisma.digestSubscription.count(),
+        prisma.subscription.count({ where: { isActive: true } }), prisma.knowledgeSubscription.count({ where: { isActive: true } }), prisma.digestSubscription.count({ where: { isActive: true } }),
+      ]),
+      prisma.$queryRaw<Array<{ date: string; answers: number; correct: number; answerers: number }>>`
+        SELECT to_char("answeredAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') AS date,
+          count(*)::int AS answers, count(*) FILTER (WHERE "isCorrect")::int AS correct,
+          count(DISTINCT "respondentId")::int AS answerers
+        FROM "QuestionAnswerEvent" WHERE "answeredAt" >= ${start} AND "answeredAt" < ${end}
+        GROUP BY date ORDER BY date`,
+      prisma.$queryRaw<Array<{ bankId: string; answers: number; correct: number; answerers: number }>>`
+        SELECT "bankId", count(*)::int AS answers, count(*) FILTER (WHERE "isCorrect")::int AS correct,
+          count(DISTINCT "respondentId")::int AS answerers
+        FROM "QuestionAnswerEvent" WHERE "answeredAt" >= ${start} AND "answeredAt" < ${end}
+        GROUP BY "bankId"`,
+      prisma.questionAnswerEvent.findMany({ where: { answeredAt: { gte: start, lt: end } }, select: { respondentId: true }, distinct: ["respondentId"] }),
+      prisma.schedulerState.findMany(),
+      prisma.deliveryJob.groupBy({ by: ["status"], where: { scheduledAt: { gte: start, lt: end } }, _count: { _all: true } }),
+      prisma.deliveryJob.findMany({ where: { status: { in: ["FAILED", "UNKNOWN", "PENDING"] }, scheduledAt: { gte: start, lt: end } }, select: { id: true, kind: true, status: true, pushTime: true, scheduleDate: true, attempts: true, lastErrorCode: true, nextAttemptAt: true }, orderBy: { scheduledAt: "desc" }, take: 10 }),
+      prisma.digestCache.findMany({ orderBy: { fetchedAt: "desc" }, distinct: ["digestType"], select: { digestType: true, digestDate: true, fetchedAt: true, items: true } }),
+      prisma.questionBank.findMany({ orderBy: { subscriberCount: "desc" }, take: 10, select: { id: true, title: true, subscriberCount: true, _count: { select: { questions: true } } } }),
     ]);
-
-    const daily = new Map<
-      string,
-      { answers: number; correct: number; answerers: Set<string> }
-    >();
-    const today = dayKey(now);
-    for (let offset = days - 1; offset >= 0; offset--) {
-      const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
-      daily.set(dayKey(date), { answers: 0, correct: 0, answerers: new Set() });
-    }
-
-    const bankUsage = new Map<
-      string,
-      {
-        id: string;
-        title: string;
-        questionCount: number;
-        subscriberCount: number;
-        answers: number;
-        correct: number;
-        answerers: Set<string>;
-      }
-    >();
-    const periodAnswerers = new Set<string>();
-
-    for (const event of periodEvents) {
-      const key = dayKey(event.answeredAt);
-      const bucket = daily.get(key) ?? { answers: 0, correct: 0, answerers: new Set() };
-      bucket.answers += 1;
-      if (event.isCorrect) bucket.correct += 1;
-      bucket.answerers.add(event.respondentId);
-      daily.set(key, bucket);
-      periodAnswerers.add(event.respondentId);
-
-      const bank = event.bank;
-      const usage = bankUsage.get(event.bankId) ?? {
-        id: bank.id,
-        title: bank.title,
-        questionCount: bank._count.questions,
-        subscriberCount: bank.subscriberCount,
-        answers: 0,
-        correct: 0,
-        answerers: new Set<string>(),
-      };
-      usage.answers += 1;
-      if (event.isCorrect) usage.correct += 1;
-      usage.answerers.add(event.respondentId);
-      bankUsage.set(event.bankId, usage);
-    }
-
-    const todayBucket = daily.get(today) ?? {
-      answers: 0,
-      correct: 0,
-      answerers: new Set<string>(),
-    };
-
-    return NextResponse.json({
-      generatedAt: now.toISOString(),
-      timezone: DEFAULT_TIMEZONE,
-      days,
-      totals: {
-        questionBanks: questionBankCount,
-        knowledgeBanks: knowledgeBankCount,
-        banks: questionBankCount + knowledgeBankCount,
-        questions: questionCount,
-        knowledgePoints: knowledgePointCount,
-        activeSubscriptions: activeSubscriptionCount,
-        subscriptions: allSubscriptionCount,
-        periodAnswers: periodEvents.length,
-        periodAnswerers: periodAnswerers.size,
-        todayAnswers: todayBucket.answers,
-        todayAnswerers: todayBucket.answerers.size,
-        todayAccuracy: pct(todayBucket.correct, todayBucket.answers),
-      },
-      daily: [...daily.entries()].map(([date, value]) => ({
-        date,
-        answers: value.answers,
-        answerers: value.answerers.size,
-        correctAnswers: value.correct,
-        accuracy: pct(value.correct, value.answers),
-      })),
-      topBanks: [...bankUsage.values()]
-        .sort((a, b) => b.answers - a.answers || b.answerers.size - a.answerers.size)
-        .slice(0, 10)
-        .map((item) => ({
-          id: item.id,
-          title: item.title,
-          questionCount: item.questionCount,
-          subscriberCount: item.subscriberCount,
-          answers: item.answers,
-          answerers: item.answerers.size,
-          correctAnswers: item.correct,
-          accuracy: pct(item.correct, item.answers),
-        })),
+    const dailyMap = new Map(dailyRows.map(row => [row.date, row]));
+    const daily = Array.from({ length: days }, (_, index) => {
+      const date = dateKey(new Date(start.getTime() + index * 86400000));
+      const row = dailyMap.get(date) ?? { answers: 0, correct: 0, answerers: 0 };
+      return { date, answers: row.answers, answerers: row.answerers, correctAnswers: row.correct, accuracy: pct(row.correct, row.answers) };
     });
-  } catch (error) {
-    console.error("[GET /api/admin/overview]", error);
-    return NextResponse.json(
-      { error: "Failed to fetch admin overview" },
-      { status: 500 },
-    );
+    const today = daily[daily.length - 1];
+    const banks = await prisma.questionBank.findMany({ where: { id: { in: [...new Set([...bankRows.map(row => row.bankId), ...mostSubscribed.map(bank => bank.id)])] } }, select: { id: true, title: true, subscriberCount: true, _count: { select: { questions: true } } } });
+    const usage = new Map(bankRows.map(row => [row.bankId, row]));
+    const ranked = banks.map(bank => {
+      const row = usage.get(bank.id) ?? { answers: 0, correct: 0, answerers: 0 };
+      return { id: bank.id, title: bank.title, subscriberCount: bank.subscriberCount, questionCount: bank._count.questions, answers: row.answers, answerers: row.answerers, correctAnswers: row.correct, accuracy: pct(row.correct, row.answers) };
+    });
+    const scheduler = states.find(state => state.id === "main");
+    const qa = states.find(state => state.id === "qa-answers");
+    return NextResponse.json({
+      generatedAt: now.toISOString(), timezone: DISPLAY_TIMEZONE, days,
+      totals: { questionBanks: questionBankCount, knowledgeBanks: knowledgeBankCount, banks: questionBankCount + knowledgeBankCount,
+        questions: questionCount, knowledgePoints: knowledgePointCount, subscriptions: subscriptions.slice(0, 3).reduce((sum, count) => sum + count, 0), activeSubscriptions: subscriptions.slice(3).reduce((sum, count) => sum + count, 0),
+        periodAnswers: daily.reduce((sum, row) => sum + row.answers, 0), periodAnswerers: answerers.length,
+        todayAnswers: today.answers, todayAnswerers: today.answerers, todayAccuracy: today.accuracy },
+      daily, topBanks: [...ranked].sort((a, b) => b.answers - a.answers || b.subscriberCount - a.subscriberCount).slice(0, 10),
+      topSubscribedBanks: [...ranked].sort((a, b) => b.subscriberCount - a.subscriberCount || b.answers - a.answers).slice(0, 10),
+      operations: { schedulerLastTickAt: scheduler?.lastTickAt ?? null, schedulerHealthy: !!scheduler && now >= scheduler.lastTickAt && now.getTime() - scheduler.lastTickAt.getTime() < 180000, pushConfigured: !validatePushConfiguration().length,
+        qaLastSyncAt: qa?.lastTickAt ?? null, qaSyncError: qa?.lastErrorCode ?? null, jobs: Object.fromEntries(jobCounts.map(row => [row.status, row._count._all])), failures,
+        caches: caches.map(cache => ({ digestType: cache.digestType, digestDate: cache.digestDate, fetchedAt: cache.fetchedAt, available: Array.isArray(cache.items) && cache.items.length > 0 })) },
+    });
+  } catch {
+    console.error("[Admin] Failed to fetch overview");
+    return NextResponse.json({ error: "Failed to fetch admin overview" }, { status: 500 });
   }
 }

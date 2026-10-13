@@ -202,6 +202,7 @@ export function KnowledgeCard({
                         {pushTimes.map((time) => (
                           <Badge
                             key={time}
+                            render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
                             className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
                             onClick={() =>
                               setPushTimes((prev) => prev.filter((item) => item !== time))

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentSession } from "@/lib/auth";
+import { getCurrentSession, getSessionDepartmentKeys } from "@/lib/auth";
+import { canManageSubscription, canSubscribeContent } from "@/lib/content/access";
 import { canAccessKnowledgeBank } from "@/lib/knowledge/access";
 import { prisma } from "@/lib/prisma";
 import {
@@ -15,7 +16,7 @@ function normalizePushTimes(pushTimes: unknown): string[] | NextResponse {
   const times = raw
     .filter((time): time is string => typeof time === "string")
     .map((time) => time.trim())
-    .filter((time) => /^\d{2}:\d{2}$/.test(time));
+    .filter((time) => /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
   const unique = [...new Set(times)].sort();
   if (unique.length === 0) {
     return NextResponse.json(
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
     const targetIdParam = searchParams.get("targetId");
     const session = await getCurrentSession();
 
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     let targetId: string | null = null;
     if (targetType === "GROUP") {
       targetId = targetIdParam;
@@ -54,6 +57,7 @@ export async function GET(request: NextRequest) {
         targetType,
         targetId,
         isActive: true,
+        ...(targetType === "GROUP" && !session.user.isAdmin ? { subscriberId: session.user.id } : {}),
       },
       include: {
         subscriber: {
@@ -157,7 +161,8 @@ export async function POST(request: NextRequest) {
     if (!bank) {
       return NextResponse.json({ error: "Knowledge bank not found" }, { status: 404 });
     }
-    const allowed = await canAccessKnowledgeBank(bank, session.user.id);
+    const allowed = await canAccessKnowledgeBank(bank, session.user.id, await getSessionDepartmentKeys(session))
+      && canSubscribeContent(bank, targetType, session.user.id, session.user.departmentIds);
     if (!allowed) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -174,6 +179,9 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+    if (existing && !canManageSubscription(existing, session.user)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (existing?.isActive) {
       return NextResponse.json(
         { error: "Already subscribed to this knowledge bank" },

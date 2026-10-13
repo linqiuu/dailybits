@@ -3,6 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionReuseAction } from "@/lib/subscriptions/reuse";
 import { normalizePushTimes } from "@/lib/subscriptions/schedule";
+import { canManageSubscription, canSubscribeContent } from "@/lib/content/access";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
@@ -113,6 +114,9 @@ export async function POST(request: NextRequest) {
     if (!bank) {
       return NextResponse.json({ error: "Bank not found" }, { status: 404 });
     }
+    if (!canSubscribeContent(bank, targetType, session.user.id, session.user.departmentIds)) {
+      return NextResponse.json({ error: "无权订阅此内容；群订阅仅支持公开内容" }, { status: 403 });
+    }
 
     const validTimes =
       bank.subscriptionScheduleMode === "FIXED"
@@ -141,6 +145,9 @@ export async function POST(request: NextRequest) {
       },
     });
     if (existing) {
+      if (!canManageSubscription(existing, session.user)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
       const reuse = getSubscriptionReuseAction(existing);
       if (reuse.action === "conflict") {
         return NextResponse.json(
@@ -168,6 +175,7 @@ export async function POST(request: NextRequest) {
             endCondition,
             repeatCount,
             currentCycle: 0,
+            generation: { increment: 1 },
             subscriberId: session.user.id,
           },
           include: {
@@ -181,13 +189,6 @@ export async function POST(request: NextRequest) {
                 subscriptionPushTimes: true,
               },
             },
-          },
-        }),
-        prisma.pushLog.deleteMany({
-          where: {
-            targetType,
-            targetId,
-            question: { bankId: bank.id },
           },
         }),
       ]);

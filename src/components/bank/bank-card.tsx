@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarClock, CheckCircle2, Clock, Users } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock, Users, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -163,7 +163,7 @@ export function BankCard({
           <div className="min-w-0 space-y-1">
             <Link href={`/bank/${id}`} className="block min-w-0 hover:underline">
               <CardTitle
-                className={cn("truncate font-semibold", compact ? "text-base" : "text-lg")}
+                className={cn("truncate font-semibold", compact ? "text-base group-data-[size=sm]/card:text-base" : "text-lg")}
                 title={title}
               >
                 {title}
@@ -274,6 +274,8 @@ export function BankCard({
                         </p>
                         <div className="flex gap-2">
                           <Input
+                            id={`push-time-${id}`}
+                            aria-label="新增推送时间"
                             type="time"
                             value={newTime}
                             onChange={(e) => setNewTime(e.target.value)}
@@ -300,11 +302,12 @@ export function BankCard({
                           {pushTimes.map((t) => (
                             <Badge
                               key={t}
+                              render={<button type="button" aria-label={`移除 ${t} 推送时间`} />}
                               className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
                               onClick={() => removeTime(t)}
                             >
                               <Clock className="size-3" />
-                              {t} x
+                              {t}<X className="size-3" aria-hidden />
                             </Badge>
                           ))}
                         </div>
@@ -347,7 +350,7 @@ function Stat({
         {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
         <span className="truncate">{label}</span>
       </div>
-      <div className="mt-1 truncate text-base font-semibold text-foreground">
+      <div className="truncate text-sm font-semibold text-foreground">
         {value}
       </div>
     </div>

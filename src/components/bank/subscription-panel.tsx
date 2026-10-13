@@ -263,6 +263,7 @@ export function SubscriptionPanel({
       <div className="flex gap-2">
         <Input
           type="time"
+          aria-label="新增题库推送时间"
           value={newTime}
           onChange={(event) => setNewTime(event.target.value)}
           className="h-9 flex-1"
@@ -281,6 +282,7 @@ export function SubscriptionPanel({
         {pushTimes.map((time) => (
           <Badge
             key={time}
+            render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
             variant="secondary"
             className="h-7 cursor-pointer rounded-md font-normal"
             onClick={() => removeTime(time)}

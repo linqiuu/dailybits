@@ -10,3 +10,8 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+browser-artifacts
+.impeccable
+question-banks
+src/generated
+*.tsbuildinfo

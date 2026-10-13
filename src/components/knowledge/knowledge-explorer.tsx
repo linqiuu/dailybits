@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
 import { KnowledgeCard } from "./knowledge-card";
+import { RequestState } from "@/components/ui/request-state";
 
 interface KnowledgeBank {
   id: string;
@@ -48,6 +49,7 @@ export function KnowledgeExplorer({
   const [page, setPage] = useState(1);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const fetchIdRef = useRef(0);
 
   useEffect(() => {
@@ -59,19 +61,20 @@ export function KnowledgeExplorer({
   const fetchBanks = useCallback(() => {
     const id = ++fetchIdRef.current;
     setLoading(true);
+    setFailed(false);
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("search", debouncedSearch);
     params.set("page", String(page));
     params.set("targetType", targetType);
     if (targetId) params.set("targetId", targetId);
     fetch(`/api/knowledge-banks?${params}`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Unavailable"); return res.json(); })
       .then((json: ApiResponse | { error: string }) => {
         if (id !== fetchIdRef.current) return;
-        setData("error" in json ? null : json);
+        if ("error" in json) { setData(null); setFailed(true); } else setData(json);
       })
       .catch(() => {
-        if (id === fetchIdRef.current) setData(null);
+        if (id === fetchIdRef.current) { setData(null); setFailed(true); }
       })
       .finally(() => {
         if (id === fetchIdRef.current) setLoading(false);
@@ -113,6 +116,8 @@ export function KnowledgeExplorer({
 
       {loading ? (
         <SkeletonCardGrid />
+      ) : failed ? (
+        <RequestState title="知识库暂时加载失败" onRetry={fetchBanks} />
       ) : data?.banks.length ? (
         <>
           <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">

@@ -1,14 +1,15 @@
+x-database-env: &database-env
+  POSTGRES_DB: "${POSTGRES_DB:-dailybits}"
+  POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+
 services:
   db:
     image: postgres:16-bookworm
     restart: unless-stopped
     environment:
+      <<: *database-env
       TZ: "${TZ:-Asia/Shanghai}"
-      POSTGRES_DB: "${POSTGRES_DB:-dailybits}"
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,13 +26,14 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env
+      - "${DAILYBITS_ENV_FILE:-.env}"
     environment:
-      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/dailybits?schema=public}"
+      <<: *database-env
+      DOCKER_DATABASE_URL: "${DOCKER_DATABASE_URL:-}"
       NODE_ENV: production
       APP_ENV: production
       TZ: "${TZ:-Asia/Shanghai}"
-    command: sh -c "npx prisma migrate deploy"
+    command: ["node", "scripts/container-start.mjs", "migrate"]
 
   app:
     build:
@@ -43,18 +45,24 @@ services:
       migrate:
         condition: service_completed_successfully
     env_file:
-      - .env
+      - "${DAILYBITS_ENV_FILE:-.env}"
     environment:
-      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/dailybits?schema=public}"
+      <<: *database-env
+      DOCKER_DATABASE_URL: "${DOCKER_DATABASE_URL:-}"
       AUTH_MODE: gateway
       NODE_ENV: production
       APP_ENV: production
       TZ: "${TZ:-Asia/Shanghai}"
       SCHEDULER_TIMEZONE: "${SCHEDULER_TIMEZONE:-Asia/Shanghai}"
       NEXT_TELEMETRY_DISABLED: "1"
-    command: sh -c "npm run start"
+    command: ["node", "scripts/container-start.mjs", "web"]
     ports:
-      - "3000:3000"
+      - "${APP_BIND_IP:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   scheduler:
     build:
@@ -66,9 +74,10 @@ services:
       migrate:
         condition: service_completed_successfully
     env_file:
-      - .env
+      - "${DAILYBITS_ENV_FILE:-.env}"
     environment:
-      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@db:5432/dailybits?schema=public}"
+      <<: *database-env
+      DOCKER_DATABASE_URL: "${DOCKER_DATABASE_URL:-}"
       NODE_ENV: production
       APP_ENV: production
       TZ: "${TZ:-Asia/Shanghai}"
@@ -76,7 +85,7 @@ services:
       HOLIDAY_COUNTRY: "${HOLIDAY_COUNTRY:-CN}"
       SKIP_NON_WORKING_DAYS: "${SKIP_NON_WORKING_DAYS:-true}"
       NEXT_TELEMETRY_DISABLED: "1"
-    command: sh -c "npm run scheduler"
+    command: ["node", "scripts/container-start.mjs", "scheduler"]
 
 volumes:
   postgres_data:

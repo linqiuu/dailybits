@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { pushKnowledgeSubscription } from "@/lib/knowledge/delivery";
+import { getCurrentSession, isAdminSession } from "@/lib/auth";
 
 function getCurrentTimeHHMM(timezone: string): string {
   return new Date().toLocaleTimeString("en-GB", {
@@ -17,6 +18,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (!isAdminSession(await getCurrentSession())) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const body = await request.json().catch(() => ({}));
     const {
       targetType = "USER",

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RequestState } from "@/components/ui/request-state";
 
 interface PushLogItem {
   pushedAt: string;
@@ -25,6 +26,7 @@ function formatTime(dateStr: string): string {
   if (diffHours < 24) return `${diffHours} 小时前`;
   if (diffDays < 7) return `${diffDays} 天前`;
   return d.toLocaleDateString("zh-CN", {
+    timeZone: "Asia/Shanghai",
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
@@ -38,16 +40,19 @@ export function PushHistory() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const fetchLogs = (p: number, append: boolean) => {
     fetch(`/api/push/logs?page=${p}`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Unavailable"); return res.json(); })
       .then((data) => {
         if (data.logs) {
           setLogs((prev) => (append ? [...prev, ...data.logs] : data.logs));
           setTotalPages(data.totalPages ?? 0);
+          setFailed(false);
         }
       })
+      .catch(() => setFailed(true))
       .finally(() => {
         if (append) {
           setLoadingMore(false);
@@ -92,6 +97,8 @@ export function PushHistory() {
       </div>
     );
   }
+
+  if (failed) return <RequestState title="推送记录暂时加载失败" onRetry={() => fetchLogs(page, page > 1)} />;
 
   return (
     <div className="space-y-4">

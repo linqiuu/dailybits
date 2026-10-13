@@ -1,232 +1,74 @@
 import "dotenv/config";
 import cron from "node-cron";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "../generated/prisma/client.js";
-import type { TargetType, EndCondition } from "../generated/prisma/client.js";
+import { PrismaClient, type DeliveryKind } from "../generated/prisma/client.js";
 import Holidays from "date-holidays";
-import { runDueDigestSubscriptions } from "../lib/digest/delivery.js";
-import { runDueKnowledgeSubscriptions } from "../lib/knowledge/delivery.js";
-import { pushToTarget } from "../lib/push/adapter.js";
-import { buildPayload } from "../lib/push/payload.js";
-import { isoWeekdayInTimeZone } from "../lib/subscriptions/schedule.js";
+import { drainDeliveryJobs, enqueueDueJobs } from "../lib/push/jobs.js";
+import { validatePushConfiguration } from "../lib/push/adapter.js";
+import { dateKey } from "../lib/time.js";
+import { syncAnswerEvents } from "../lib/qa-events.js";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
-const holidayCalendar = new Holidays(process.env.HOLIDAY_COUNTRY ?? "CN");
-const skipNonWorkingDays = process.env.SKIP_NON_WORKING_DAYS !== "false";
-const schedulerTZ = process.env.SCHEDULER_TIMEZONE ?? "Asia/Shanghai";
+const missing = validatePushConfiguration();
+if (missing.length) throw new Error(`Scheduler configuration missing: ${missing.join(", ")}`);
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const timezone = process.env.SCHEDULER_TIMEZONE || "Asia/Shanghai";
+const calendar = new Holidays(process.env.HOLIDAY_COUNTRY || "CN");
+const runningKinds = new Set<DeliveryKind>();
+let stopping = false;
+let syncingAnswers = false;
 
-function getCurrentTimeHHMM(): string {
+function nonWorkingDay(date: Date): boolean {
+  if (process.env.SKIP_NON_WORKING_DAYS === "false") return false;
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(date);
+  return weekday === "Sat" || weekday === "Sun" || !!calendar.isHoliday(date);
+}
+
+async function tick() {
   const now = new Date();
-  const formatted = now.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: schedulerTZ,
-    hour12: false,
-  });
-  return formatted;
-}
-
-function shouldSkipPushToday(date: Date): {
-  skip: boolean;
-  reason?: "weekend" | "holiday";
-  holidayName?: string;
-} {
-  if (!skipNonWorkingDays) {
-    return { skip: false };
-  }
-
-  const dayStr = date.toLocaleDateString("en-US", {
-    weekday: "short",
-    timeZone: schedulerTZ,
-  });
-  if (dayStr === "Sat" || dayStr === "Sun") {
-    return { skip: true, reason: "weekend" };
-  }
-
-  const holiday = holidayCalendar.isHoliday(date);
-  if (holiday) {
-    const holidays = Array.isArray(holiday) ? holiday : [holiday];
-    return {
-      skip: true,
-      reason: "holiday",
-      holidayName: (holidays[0] as { name?: string })?.name ?? "Unknown holiday",
-    };
-  }
-
-  return { skip: false };
-}
-
-async function selectQuestion(
-  targetType: TargetType,
-  targetId: string,
-  bankId: string,
-) {
-  const unpushed = await prisma.question.findFirst({
-    where: {
-      bankId,
-      status: "PUBLISHED",
-      pushLogs: { none: { targetType, targetId } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  if (unpushed) return unpushed;
-  return null;
-}
-
-async function handleSubscriptionComplete(sub: {
-  id: string;
-  targetType: TargetType;
-  targetId: string;
-  bankId: string;
-  endCondition: EndCondition;
-  repeatCount: number;
-  currentCycle: number;
-}): Promise<boolean> {
-  if (
-    sub.endCondition === "REPEAT_N_TIMES" &&
-    sub.currentCycle < sub.repeatCount
-  ) {
-    await prisma.$transaction([
-      prisma.pushLog.deleteMany({
-        where: {
-          targetType: sub.targetType,
-          targetId: sub.targetId,
-          question: { bankId: sub.bankId },
-        },
-      }),
-      prisma.subscription.update({
-        where: { id: sub.id },
-        data: { currentCycle: { increment: 1 } },
-      }),
-    ]);
-    console.log(
-      `[Scheduler] Cycle ${sub.currentCycle + 1}/${sub.repeatCount} for ${sub.targetType}:${sub.targetId}, resetting push logs`
-    );
-    return true;
-  }
-
-  await prisma.subscription.update({
-    where: { id: sub.id },
-    data: { isActive: false },
-  });
-  console.log(
-    `[Scheduler] Subscription ${sub.id} completed, deactivated`
-  );
-  return false;
-}
-
-async function resolveReceiver(
-  targetType: TargetType,
-  targetId: string,
-): Promise<string> {
-  if (targetType === "GROUP") {
-    return targetId;
-  }
-  const user = await prisma.user.findUnique({
-    where: { id: targetId },
-    select: { uid: true },
-  });
-  return user?.uid ?? targetId;
-}
-
-function shouldRunFixedBankScheduleToday(
-  bank: {
-    subscriptionScheduleMode: string;
-    subscriptionCadence: string;
-    subscriptionWeekdays: number[];
-  },
-  date: Date,
-): boolean {
-  if (bank.subscriptionScheduleMode !== "FIXED") return true;
-  if (bank.subscriptionCadence !== "WEEKLY") return true;
-  const weekdays = bank.subscriptionWeekdays.length
-    ? bank.subscriptionWeekdays
-    : [1];
-  return weekdays.includes(isoWeekdayInTimeZone(date, schedulerTZ));
-}
-
-cron.schedule("* * * * *", async () => {
-  const now = new Date();
-  const currentTime = getCurrentTimeHHMM();
-  console.log(`[Scheduler] Tick at ${currentTime}`);
-
-  const skipDecision = shouldSkipPushToday(now);
-  if (skipDecision.skip) {
-    if (skipDecision.reason === "holiday") {
-      console.log(
-        `[Scheduler] Skip all pushes on holiday: ${skipDecision.holidayName ?? "Unknown holiday"}`
-      );
-    } else {
-      console.log("[Scheduler] Skip all pushes on weekend");
+  try {
+    if (nonWorkingDay(now)) {
+      await prisma.schedulerState.upsert({ where: { id: "main" }, create: { id: "main", lastTickAt: now }, update: { lastTickAt: now, lastErrorCode: null } });
+      return;
     }
-    return;
+    await enqueueDueJobs(prisma, now, timezone);
+  } catch {
+    console.error("[Scheduler] Enqueue failed; retained delivery tasks will retry");
+    await prisma.schedulerState.updateMany({ where: { id: "main" }, data: { lastErrorCode: "ENQUEUE_FAILED" } }).catch(() => {});
   }
+}
 
-  await runDueDigestSubscriptions(prisma, currentTime, schedulerTZ);
-  await runDueKnowledgeSubscriptions(prisma, currentTime, schedulerTZ);
-
-  const matchedSubs = await prisma.subscription.findMany({
-    where: {
-      isActive: true,
-      OR: [
-        {
-          pushTimes: { has: currentTime },
-          bank: { subscriptionScheduleMode: "CUSTOM" },
-        },
-        {
-          bank: {
-            subscriptionScheduleMode: "FIXED",
-            subscriptionPushTimes: { has: currentTime },
-          },
-        },
-      ],
-    },
-    include: { bank: true },
-  });
-
-  for (const sub of matchedSubs) {
-    try {
-      if (!shouldRunFixedBankScheduleToday(sub.bank, now)) continue;
-
-      let question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
-
-      if (!question) {
-        const continued = await handleSubscriptionComplete(sub);
-        if (continued) {
-          question = await selectQuestion(sub.targetType, sub.targetId, sub.bankId);
-        }
-        if (!question) continue;
-      }
-
-      const receiver = await resolveReceiver(sub.targetType, sub.targetId);
-      const payload = buildPayload(receiver, sub.bank.title, question, {
-        authorId: sub.subscriberId ?? sub.targetId,
-        businessId: question.id,
-        domain: sub.bank.title,
-        scene: "daily-question",
-      });
-      const success = await pushToTarget({
-        ...payload,
-        receiver,
-        options: question.options as string[],
-      });
-      if (success) {
-        await prisma.pushLog.create({
-          data: {
-            targetType: sub.targetType,
-            targetId: sub.targetId,
-            questionId: question.id,
-          },
-        });
-        console.log(
-          `[Scheduler] Pushed to ${sub.targetType}:${sub.targetId}`
-        );
-      }
-    } catch (err) {
-      console.error(`[Scheduler] Error for subscription ${sub.id}:`, err);
-    }
+function startWorkers() {
+  if (stopping || nonWorkingDay(new Date())) return;
+  for (const kind of ["QUESTION", "KNOWLEDGE", "DIGEST"] as const) {
+    if (runningKinds.has(kind)) continue;
+    runningKinds.add(kind);
+    void drainDeliveryJobs(prisma, timezone, kind)
+      .catch(() => console.error(`[Scheduler] ${kind} worker failed; its task lease is recoverable`))
+      .finally(() => runningKinds.delete(kind));
   }
-});
+}
 
-console.log("[Scheduler] Started. Checking every minute...");
+const task = cron.schedule("* * * * *", tick, { timezone, noOverlap: true });
+const workerTimer = setInterval(startWorkers, 5000);
+function startAnswerSync() {
+  if (syncingAnswers || stopping) return;
+  syncingAnswers = true;
+  void syncAnswerEvents(prisma).catch(() => console.error("[Scheduler] Answer synchronization unavailable"))
+    .finally(() => { syncingAnswers = false; });
+}
+const answerTimer = setInterval(startAnswerSync, 60000);
+startAnswerSync();
+void tick().then(startWorkers);
+console.info(`[Scheduler] Started for ${dateKey(new Date(), timezone)}, timezone=${timezone}`);
+
+async function shutdown() {
+  stopping = true;
+  clearInterval(workerTimer);
+  clearInterval(answerTimer);
+  await task.stop();
+  // Unfinished jobs retain their lease and stable key for the next process.
+  await prisma.$disconnect();
+  process.exit(0);
+}
+process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => void shutdown());

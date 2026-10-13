@@ -1,7 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { DigestPushPayload, KnowledgePushPayload, PushPayload } from "../../types";
 
-type AnyPushPayload = PushPayload | DigestPushPayload | KnowledgePushPayload;
+export type AnyPushPayload = PushPayload | DigestPushPayload | KnowledgePushPayload;
+export type PushResult =
+  | { ok: true; status: "accepted"; messageId?: string; mocked?: boolean }
+  | { ok: false; code: string; retryable: boolean; uncertain?: boolean; retryAfterMs?: number };
 type PushProvider = "generic" | "card-service" | "messaging";
 type MessagingCardContent = string | string[] | Record<string, string>;
 
@@ -240,7 +243,7 @@ function buildQuestionMessagingContent(payload: PushPayload): string {
   );
 }
 
-function buildMessagingCardRequest(payload: AnyPushPayload): MessagingCardRequest | null {
+export function buildMessagingCardRequest(payload: AnyPushPayload): MessagingCardRequest | null {
   if (isDigestPayload(payload)) {
     const content = buildDigestMessagingContent(payload);
     if (content.length === 0) return null;
@@ -269,7 +272,9 @@ function buildMessagingCardRequest(payload: AnyPushPayload): MessagingCardReques
 
 function messagingIdempotencyKey(payload: AnyPushPayload): string {
   const configured = payload.idempotencyKey?.trim();
-  return configured ? configured.slice(0, 128) : randomUUID();
+  return configured
+    ? configured.length <= 128 ? configured : createHash("sha256").update(configured).digest("hex")
+    : randomUUID();
 }
 
 function parseRetryAfterMs(value: string | null): number | undefined {
@@ -294,7 +299,7 @@ function messagingRetryDelayMs(response: Response | null, attemptIndex: number):
     DEFAULT_MESSAGING_MAX_RETRY_DELAY_MS,
   );
   const retryAfter = parseRetryAfterMs(response?.headers.get("Retry-After") ?? null);
-  if (retryAfter !== undefined) return Math.min(retryAfter, maxDelay);
+  if (retryAfter !== undefined) return retryAfter;
 
   const base = positiveIntegerEnv(
     "MESSAGING_RETRY_BASE_MS",
@@ -353,34 +358,69 @@ function cardServiceSendUrl(): string | null {
   return new URL(path, base.endsWith("/") ? base : `${base}/`).toString();
 }
 
-async function pushGeneric(payload: AnyPushPayload): Promise<boolean> {
+async function pushGeneric(payload: AnyPushPayload): Promise<PushResult> {
   const url = process.env.PUSH_API_URL;
   if (!url) {
-    console.log("[PUSH MOCK]", JSON.stringify(payload, null, 2));
-    return true;
+    if (process.env.NODE_ENV !== "production" && process.env.APP_ENV !== "production" && process.env.PUSH_MOCK === "true") {
+      console.info("[Push] Development mock accepted a card");
+      return { ok: true, status: "accepted", mocked: true };
+    }
+    return { ok: false, code: "PUSH_NOT_CONFIGURED", retryable: false };
   }
-  const response = await fetch(url, {
+  try {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": messagingIdempotencyKey(payload) },
     body: JSON.stringify(payload),
-  });
-  return response.ok;
+  }, positiveIntegerEnv("PUSH_TIMEOUT_MS", 15000));
+  return response.ok ? { ok: true, status: "accepted" } : failureResult(response);
+  } catch {
+    return { ok: false, code: "NETWORK_UNCERTAIN", retryable: false, uncertain: true };
+  }
+}
+
+function failureResult(response: Response, code?: string): PushResult {
+  return {
+    ok: false,
+    code: code || `HTTP_${response.status}`,
+    retryable: response.status === 429 || response.status === 503,
+    retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After")),
+  };
+}
+
+export function validatePushConfiguration(): string[] {
+  if (process.env.NODE_ENV !== "production" && process.env.APP_ENV !== "production") return [];
+  const missing: string[] = [];
+  const provider = pushProvider();
+  if (provider === "generic") {
+    if (!process.env.PUSH_API_URL?.trim()) missing.push("PUSH_API_URL");
+  } else {
+    if (!messagingApiBaseUrl(false)) missing.push("MESSAGING_API_BASE_URL or INNER_API_BASE_URL");
+    if (!(process.env.MESSAGING_INNER_API_KEY?.trim() || process.env.INNER_API_KEY?.trim())) missing.push("MESSAGING_INNER_API_KEY or INNER_API_KEY");
+    if (provider === "card-service") {
+      if (!cardServiceSendUrl()) missing.push("CARD_SERVICE_API_BASE");
+      if (!process.env.CARD_SERVICE_SEND_API_KEY?.trim()) missing.push("CARD_SERVICE_SEND_API_KEY");
+      if (!process.env.CARD_SERVICE_QA_ANSWER_CALLBACK_URL?.trim()) missing.push("CARD_SERVICE_QA_ANSWER_CALLBACK_URL");
+      if (!process.env.CARD_SERVICE_EVENT_SECRET?.trim()) missing.push("CARD_SERVICE_EVENT_SECRET");
+    }
+  }
+  return missing;
 }
 
 async function pushMessagingCard(
   payload: AnyPushPayload,
   allowDevDefault = false,
-): Promise<boolean> {
+): Promise<PushResult> {
   const url = messagingSendUrl(allowDevDefault);
   if (!url) {
     console.error("[Push] INNER_API_BASE_URL is required for Messaging card pushes");
-    return false;
+    return { ok: false, code: "MESSAGING_NOT_CONFIGURED", retryable: false };
   }
 
   const request = buildMessagingCardRequest(payload);
   if (!request) {
     console.error("[Push] Cannot map payload to Messaging card shape");
-    return false;
+    return { ok: false, code: "INVALID_CARD_PAYLOAD", retryable: false };
   }
 
   const apiKey = process.env.MESSAGING_INNER_API_KEY?.trim()
@@ -417,70 +457,80 @@ async function pushMessagingCard(
 
       if (response.status === 202) {
         const data = (await response.json().catch(() => null)) as MessagingCardResponse | null;
-        if (data?.status === "accepted") return true;
+        if (data?.status === "accepted") return { ok: true, status: "accepted", messageId: data.messageId };
         console.error("[Push] messaging card returned 202 without accepted status");
-        return false;
+        return { ok: false, code: "INVALID_ACCEPTANCE_RESPONSE", retryable: true };
       }
 
       const error = await readMessagingError(response);
       if (!shouldRetryMessagingStatus(response.status) || attempt === attempts - 1) {
         logMessagingFailure(response, error);
-        return false;
+        return failureResult(response, error.code);
       }
     } catch (error) {
       if (attempt === attempts - 1) {
         const message = error instanceof Error ? error.name : String(error);
         console.error(`[Push] messaging card failed after network retry: ${message}`);
-        return false;
+        return { ok: false, code: "MESSAGING_NETWORK_UNCERTAIN", retryable: false, uncertain: true };
       }
     }
 
-    await sleep(messagingRetryDelayMs(response, attempt));
+    const delay = messagingRetryDelayMs(response, attempt);
+    if (delay > positiveIntegerEnv("MESSAGING_MAX_RETRY_DELAY_MS", DEFAULT_MESSAGING_MAX_RETRY_DELAY_MS)) {
+      return response ? failureResult(response) : { ok: false, code: "NETWORK_RETRY", retryable: true, retryAfterMs: delay };
+    }
+    await sleep(delay);
   }
 
-  return false;
+  return { ok: false, code: "MESSAGING_RETRIES_EXHAUSTED", retryable: true };
 }
 
-async function pushCardServiceQa(payload: PushPayload): Promise<boolean> {
+async function pushCardServiceQa(payload: PushPayload): Promise<PushResult> {
   const url = cardServiceSendUrl();
   if (!url) {
     console.error("[Push] CARD_SERVICE_API_BASE is required for card-service provider");
-    return false;
+    return { ok: false, code: "CARD_SERVICE_NOT_CONFIGURED", retryable: false };
   }
 
   const apiKey = process.env.CARD_SERVICE_SEND_API_KEY?.trim();
   if (!apiKey) {
     console.error("[Push] CARD_SERVICE_SEND_API_KEY is required for card-service provider");
-    return false;
+    return { ok: false, code: "CARD_SERVICE_KEY_MISSING", retryable: false };
   }
 
   const request = buildCardServiceQaPayload(payload);
   if (!request) {
     console.error("[Push] Cannot map question payload to card-service QA shape");
-    return false;
+    return { ok: false, code: "INVALID_QUESTION_PAYLOAD", retryable: false };
   }
 
   const keyHeader = process.env.CARD_SERVICE_SEND_API_KEY_HEADER?.trim()
     || "X-Card-Service-Key";
-  const response = await fetch(url, {
+  try {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       [keyHeader]: apiKey,
+      "Idempotency-Key": messagingIdempotencyKey(payload),
     },
     body: JSON.stringify(request),
-  });
+  }, positiveIntegerEnv("PUSH_TIMEOUT_MS", 15000));
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    console.error(
-      `[Push] card-service QA failed: HTTP ${response.status} ${response.statusText}` +
-        (body ? ` ${body.slice(0, 300)}` : ""),
-    );
+    const error = await response.json().catch(() => null) as { detail?: { code?: string } } | null;
+    const code = error?.detail?.code;
+    if (response.status >= 500) return { ok: false, code: code || "QA_SERVICE_UNAVAILABLE", retryable: true };
+    return { ...failureResult(response, code), ...(code === "DELIVERY_UNCERTAIN" ? { ok: false as const, uncertain: true, retryable: false } : {}) } as PushResult;
   }
-  return response.ok;
+  const data = await response.json().catch(() => null) as { ok?: boolean; card_id?: string } | null;
+  if (data?.ok !== true) return { ok: false, code: "INVALID_QA_RESPONSE", retryable: false, uncertain: true };
+  return { ok: true, status: "accepted", messageId: data.card_id };
+  } catch {
+    return { ok: false, code: "QA_NETWORK_RETRY", retryable: true };
+  }
 }
 
-export async function pushToTarget(payload: AnyPushPayload): Promise<boolean> {
+export async function sendToTarget(payload: AnyPushPayload): Promise<PushResult> {
   const provider = pushProvider();
   if (provider === "generic") {
     return pushGeneric(payload);
@@ -492,4 +542,8 @@ export async function pushToTarget(payload: AnyPushPayload): Promise<boolean> {
 
   if (isQuestionPayload(payload)) return pushCardServiceQa(payload);
   return pushMessagingCard(payload, true);
+}
+
+export async function pushToTarget(payload: AnyPushPayload): Promise<boolean> {
+  return (await sendToTarget(payload)).ok;
 }
