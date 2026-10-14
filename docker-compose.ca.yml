@@ -1,0 +1,16 @@
+services:
+  app:
+    volumes:
+      - /opt/company-pki/ca-bundle.pem:/run/company-pki/ca-bundle.pem:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/company-pki/ca-bundle.pem
+  scheduler:
+    volumes:
+      - /opt/company-pki/ca-bundle.pem:/run/company-pki/ca-bundle.pem:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/company-pki/ca-bundle.pem
+  migrate:
+    volumes:
+      - /opt/company-pki/ca-bundle.pem:/run/company-pki/ca-bundle.pem:ro
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/company-pki/ca-bundle.pem

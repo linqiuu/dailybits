@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth";
+import { internalFetch } from "@/lib/http/outbound";
 
 type DepartmentItem = { id?: string; name: string };
 type DepartmentsResponse = { departments: DepartmentItem[] };
@@ -60,7 +61,7 @@ export async function GET() {
       ? `${baseUrl}&uid=${encodeURIComponent(userUid)}`
       : `${baseUrl.replace(/\/?$/, "")}?uid=${encodeURIComponent(userUid)}`;
 
-    const res = await fetch(upstreamUrl, {
+    const res = await internalFetch(upstreamUrl, {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",

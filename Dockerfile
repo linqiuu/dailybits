@@ -1,11 +1,12 @@
-FROM node:22-bookworm-slim
+ARG BASE_IMAGE=node:22-bookworm-slim
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
 ARG APT_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian
 ARG APT_SECURITY_MIRROR=http://mirrors.tuna.tsinghua.edu.cn/debian-security
 ARG NPM_REGISTRY=https://registry.npmmirror.com
-ENV npm_config_registry=${NPM_REGISTRY}
+ARG PRISMA_ENGINES_MIRROR=https://binaries.prisma.sh
 ENV TZ=Asia/Shanghai
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -25,12 +26,20 @@ RUN set -eux; \
 
 # Install dependencies first for better layer caching.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=secret,id=npmrc \
+    --mount=type=secret,id=company_ca \
+    if [ -f /run/secrets/company_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/company_ca; fi; \
+    if [ -f /run/secrets/npmrc ]; then export NPM_CONFIG_USERCONFIG=/run/secrets/npmrc; fi; \
+    npm_config_registry="${NPM_REGISTRY}" PRISMA_ENGINES_MIRROR="${PRISMA_ENGINES_MIRROR}" npm ci --no-audit --no-fund
 
 # Copy source code and build the app.
 COPY . .
-RUN npx prisma generate
-RUN npm run build
+RUN --mount=type=secret,id=company_ca \
+    if [ -f /run/secrets/company_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/company_ca; fi; \
+    PRISMA_ENGINES_MIRROR="${PRISMA_ENGINES_MIRROR}" node node_modules/prisma/build/index.js generate
+RUN --mount=type=secret,id=company_ca \
+    if [ -f /run/secrets/company_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/company_ca; fi; \
+    PRISMA_ENGINES_MIRROR="${PRISMA_ENGINES_MIRROR}" npm run build
 
 EXPOSE 3000
 

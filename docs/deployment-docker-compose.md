@@ -33,7 +33,7 @@ PG 不映射端口，备份、导入、运维使用 `docker compose exec/cp` 即
 
 Web 默认绑定回环地址；本机网关可直接访问。若 Auth Hub 网关在其他机器，用 `APP_BIND_IP` 设置内网地址并限制网关来源，禁止用户绕过网关伪造身份头。精确的 `/api/card-events/qa-answer` 和 `/api/health` 不依赖浏览器登录；答题回调仍要求服务密钥。其他用户 API 必须走网关。
 
-Dockerfile 默认使用国内 apt/npm 镜像。海外 CI 或私有网络可以通过 build args 覆盖：
+Dockerfile 默认使用 Debian Bookworm 和国内 apt/npm 镜像。海外 CI 或私有网络可以通过 build args 覆盖：
 
 ```bash
 docker build \
@@ -42,6 +42,85 @@ docker build \
   --build-arg NPM_REGISTRY=https://registry.npmjs.org \
   -t dailybits .
 ```
+
+## 代理和内部镜像源
+
+运行时代理和构建镜像源是两件事，不需要修改代码。三个应用容器共用 `DAILYBITS_IMAGE`，第三方 PG 镜像可以单独通过 `POSTGRES_IMAGE` 替换。镜像已构建或从内部仓库导入时，部署只需 `docker compose up -d --no-build`；容器启动不会安装 npm 依赖。
+
+### 运行时外部访问
+
+在 `.env` 中填写可从容器访问的 HTTP(S) 代理：
+
+```dotenv
+OUTBOUND_PROXY_URL=http://proxy.company.internal:3128
+NO_PROXY=localhost,127.0.0.1,[::1],.company.internal,.company.com
+OUTBOUND_HTTP_TIMEOUT_MS=60000
+```
+
+- 覆盖 GitHub 热榜/API/README、AIHOT、RSS、Hacker News、arXiv、Jina 和 OpenAI/DeepSeek 兼容模型请求；Web 预览与 Scheduler 使用同一套配置。
+- `OUTBOUND_PROXY_URL` 优先；未填写时兼容 `http_proxy` / `HTTP_PROXY`、`https_proxy` / `HTTPS_PROXY`，小写优先。全部留空则直连。不使用 `ALL_PROXY`，当前仅支持 HTTP(S) 代理（HTTPS 目标使用 CONNECT）。
+- `NO_PROXY` 支持域名及子域、可选端口和 `*`；不支持 CIDR。回环、常用私网 IP、短服务名、`.internal` / `.local` 和已配置内部服务主机始终直连。模型部署在内网 DNS 下时，将其域名加入 `NO_PROXY`。
+- Directory/Messaging、card-service、答题补拉和旧部门接口使用明确的直连客户端，不会因设置了公网代理而被转发。代理不影响数据库连接或 Auth Hub 网关注入身份。
+- 代理配置非法或不可达会明确失败，不会静默切换直连。原有新闻源兜底、限流和重试规则保留。没有自身超时的外部请求默认 60 秒；模型和 Jina 已有的超时保持不变。
+- 配置仅在服务端使用；带认证的 URL 可由 Secret 注入，例如 `http://user:encoded-password@proxy:3128`，密码中的特殊字符需 URL 编码。不会把代理地址/凭证写进请求失败日志；不要把真实值提交到仓库。修改后需要重新创建 `app` / `scheduler`，不是只刷新网页。
+- 容器内 `127.0.0.1` 是容器自身，不是宿主机。使用内网代理 DNS/IP；代理在宿主机时，可通过额外 Compose override 的 `extra_hosts: ["host.docker.internal:host-gateway"]` 并使用 `http://host.docker.internal:端口`。
+
+仅更新代理配置：
+
+```bash
+docker compose up -d --no-build --force-recreate app scheduler
+```
+
+### 内部构建
+
+下列设置在 Compose 插值用的 `.env` 或 `docker compose --env-file ...` 中填写；`DAILYBITS_ENV_FILE` 只控制容器运行时配置，不代替构建参数来源。
+
+```dotenv
+NPM_REGISTRY=https://npm.company.internal/repository/npm-group/
+APT_MIRROR=http://apt.company.internal/debian
+APT_SECURITY_MIRROR=http://apt.company.internal/debian-security
+PRISMA_ENGINES_MIRROR=https://artifacts.company.internal/prisma
+# 可选：内部镜像仓库中的等效 Bookworm 基础镜像
+BASE_IMAGE=node:22-bookworm-slim
+POSTGRES_IMAGE=postgres:16-bookworm
+# 可选：构建 apt/npm/Prisma 下载所用代理，与运行时代理独立
+BUILD_HTTP_PROXY=
+BUILD_HTTPS_PROXY=
+BUILD_NO_PROXY=localhost,127.0.0.1,.company.internal
+```
+
+这些参数会同时传入 `app` / `scheduler` / `migrate` 的构建。不配置内部源时保留国内 apt/npm 默认值，Prisma 引擎默认访问官方 `binaries.prisma.sh`；离线环境须提供兼容路径布局的引擎镜像或构建代理。npm 源应提供完整包代理，包括本项目的平台可选包，不能只有内部私有包。
+
+锁文件使用 npm 官方 registry 的标准下载标识，保留版本和 integrity，`npm ci` 才能按 `NPM_REGISTRY` 重定向到内部源；不要把锁文件重新生成成固定的私有镜像地址。详见 [npm Registry 文档](https://docs.npmjs.com/using-npm/registry.html/)。配置了镜像不代表 npm 源能镜像 Prisma 引擎，也不影响 Git/SSH 克隆题库。
+
+```bash
+docker compose build app
+docker compose up -d --no-build
+```
+
+需要登录 npm 源时，用 BuildKit Secret，不把 token 放入 build args。将公司提供的 `.npmrc` 放在构建上下文之外，并按内部 registry 主机与路径配置 token；例如 `//npm.company.internal/repository/npm-group/:_authToken=...`。若同时使用私有 CA，可加 `--secret id=company_ca,src=/opt/company-pki/ca-bundle.pem`：
+
+```bash
+docker build \
+  --build-arg NPM_REGISTRY=https://npm.company.internal/repository/npm-group/ \
+  --secret id=npmrc,src=/secure/dailybits.npmrc \
+  -t dailybits:local .
+docker compose up -d --no-build
+```
+
+`.npmrc`、环境文件、证书和私钥已排除出默认构建上下文；Secret 不复制进镜像。build args 中的源 URL 不得含密码；本机非 Docker 安装可使用 `npm ci --registry=内部源地址` 和仓库外的 npm 用户配置。
+
+### 私有 HTTPS CA
+
+若内部 HTTPS 源或代理拦截需要公司 CA，验证证书链和域名，不关闭 TLS 校验。构建 npm/Prisma 时使用上述 `company_ca` Secret；apt 的私有 HTTPS 源需要预先信任公司 CA 的 `BASE_IMAGE`。运行时将 CA PEM 放到宿主机 `/opt/company-pki/ca-bundle.pem`，使用可选 override：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ca.yml up -d --no-build
+```
+
+override 同时给 Web、Scheduler 和迁移进程设置 `NODE_EXTRA_CA_CERTS`，补充 Node 的公共根证书，不修改镜像。没有私有 CA 时不要加此 override。
+
+本次网络适配不修改卡片 API 或数据库结构，只需更新 DailyBits Web/Scheduler 镜像；card-service 不必因此重新部署。若仍运行不支持 QA 幂等/游标补拉的很旧版 card-service，仍需按下方旧库升级前提先更新它。
 
 ## 从旧库导入数据
 

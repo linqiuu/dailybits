@@ -1,4 +1,5 @@
 import type { PrismaClient } from "../generated/prisma/client";
+import { internalFetch } from "./http/outbound";
 
 export class AnswerEventError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -40,7 +41,7 @@ export async function syncAnswerEvents(prisma: PrismaClient): Promise<void> {
       url.searchParams.set("source_system", "dailybits");
       url.searchParams.set("after_id", String(cursor));
       url.searchParams.set("limit", "1000");
-      const response = await fetch(url, { headers: { [process.env.CARD_SERVICE_SEND_API_KEY_HEADER || "X-Card-Service-Key"]: process.env.CARD_SERVICE_SEND_API_KEY || "" }, signal: AbortSignal.timeout(15000) });
+      const response = await internalFetch(url, { headers: { [process.env.CARD_SERVICE_SEND_API_KEY_HEADER || "X-Card-Service-Key"]: process.env.CARD_SERVICE_SEND_API_KEY || "" }, signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error("ANSWER_SYNC_UNAVAILABLE");
       const rows: unknown = await response.json();
       if (!Array.isArray(rows)) throw new Error("INVALID_ANSWER_SYNC_RESPONSE");

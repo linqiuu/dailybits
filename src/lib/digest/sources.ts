@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { externalFetch } from "../http/outbound";
 import type { DigestType } from "../../types";
 import { getLlmTimeoutMs } from "../llm/config";
 
@@ -440,7 +441,7 @@ async function fetchText(
   const retryRateLimit = options.retryRateLimit ?? true;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const response = await externalFetch(url, {
         headers: {
           "User-Agent": "learn-digest/1.0",
           ...headers,
@@ -506,6 +507,7 @@ function getDigestSummaryClient(): OpenAI | null {
   }
   digestSummaryClient = new OpenAI({
     apiKey,
+    fetch: externalFetch,
     baseURL: baseURL || undefined,
     timeout,
   });
@@ -665,7 +667,7 @@ async function fetchGithubSearchFallback(limit: number): Promise<GithubRepo[]> {
     ...getGithubHeaders("application/vnd.github+json"),
   };
 
-  const response = await fetch(url, {
+  const response = await externalFetch(url, {
     headers: {
       "User-Agent": "learn-digest/1.0",
       ...headers,
@@ -825,7 +827,7 @@ async function fetchAiNewsFromHackerNews(limit: number): Promise<DigestItem[]> {
   url.searchParams.set("numericFilters", `created_at_i>${since},points>20`);
   url.searchParams.set("hitsPerPage", String(limit));
 
-  const response = await fetch(url, {
+  const response = await externalFetch(url, {
     headers: { "User-Agent": "learn-digest/1.0" },
   });
   if (!response.ok) return [];

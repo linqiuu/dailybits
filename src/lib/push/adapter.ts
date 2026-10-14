@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { internalFetch } from "../http/outbound";
 import type { DigestPushPayload, KnowledgePushPayload, PushPayload } from "../../types";
 
 export type AnyPushPayload = PushPayload | DigestPushPayload | KnowledgePushPayload;
@@ -320,7 +321,7 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await internalFetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }

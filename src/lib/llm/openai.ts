@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { externalFetch } from "../http/outbound";
 import type { LLMProvider } from "./provider";
 import type { GeneratedKnowledgePoint, GeneratedQuestion } from "@/types";
 import {
@@ -74,6 +75,7 @@ export class OpenAIProvider implements LLMProvider {
     }
     this.client = new OpenAI({
       apiKey,
+      fetch: externalFetch,
       baseURL: config?.baseURL ?? process.env.LLM_API_BASE_URL ?? undefined,
       timeout: getLlmTimeoutMs(),
     });

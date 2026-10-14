@@ -252,6 +252,8 @@ docker compose up --build -d
 - `scheduler`：定时推送调度进程
 - `db`：PostgreSQL 16
 
+内部环境可在 `.env` 配置 `OUTBOUND_PROXY_URL`（GitHub、新闻、论文和外部模型请求），以及 `NPM_REGISTRY` / `APT_MIRROR` 等构建镜像源；均可不额外配置。内部卡片和 Directory/Messaging 接口保持直连。详细说明、构建凭证和私有 CA 配置见 [Docker Compose 部署文档](docs/deployment-docker-compose.md#代理和内部镜像源)。
+
 ### 3. 查看日志
 
 ```bash

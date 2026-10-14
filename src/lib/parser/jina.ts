@@ -1,3 +1,5 @@
+import { externalFetch } from "../http/outbound";
+
 const JINA_READER_BASE = "https://r.jina.ai";
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -30,7 +32,7 @@ export async function fetchUrlAsMarkdown(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const res = await fetch(readerUrl, {
+    const res = await externalFetch(readerUrl, {
       method: "GET",
       headers,
       signal: controller.signal,

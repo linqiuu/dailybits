@@ -1,3 +1,5 @@
+import { internalFetch } from "./http/outbound";
+
 export interface DirectoryDepartmentNode {
   id: string;
   name: string;
@@ -99,7 +101,7 @@ export async function batchResolveDirectoryPeople(
   for (let attempt = 0; attempt < 3; attempt++) {
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await internalFetch(url, {
         method: "POST",
         headers: { ...directoryHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ identifiers }),
@@ -213,7 +215,7 @@ export async function searchDirectoryDepartments(
 
   const url = new URL("/directory/v1/departments/search", directoryBaseUrl());
   url.searchParams.set("q", q);
-  const response = await fetch(url, {
+  const response = await internalFetch(url, {
     method: "GET",
     headers: directoryHeaders(),
     cache: "no-store",

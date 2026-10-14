@@ -1,3 +1,5 @@
+import { internalFetch } from "./http/outbound";
+
 /**
  * Extracts a department name string from a value that may be a plain string
  * or an object with a `name` field (e.g. { name: "技术部" }).
@@ -31,7 +33,7 @@ export async function getUserDepartments(
     if (!url.searchParams.has("uid")) {
       url.searchParams.set("uid", userUid);
     }
-    const res = await fetch(url.toString(), { cache: "no-store" });
+    const res = await internalFetch(url.toString(), { cache: "no-store" });
     if (!res.ok) return [];
     const json: unknown = await res.json();
 

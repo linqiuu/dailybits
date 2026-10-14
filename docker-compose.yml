@@ -1,3 +1,15 @@
+x-app-build: &app-build
+  context: .
+  args:
+    BASE_IMAGE: "${BASE_IMAGE:-node:22-bookworm-slim}"
+    APT_MIRROR: "${APT_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}"
+    APT_SECURITY_MIRROR: "${APT_SECURITY_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian-security}"
+    NPM_REGISTRY: "${NPM_REGISTRY:-https://registry.npmmirror.com}"
+    PRISMA_ENGINES_MIRROR: "${PRISMA_ENGINES_MIRROR:-https://binaries.prisma.sh}"
+    HTTP_PROXY: "${BUILD_HTTP_PROXY:-}"
+    HTTPS_PROXY: "${BUILD_HTTPS_PROXY:-${BUILD_HTTP_PROXY:-}}"
+    NO_PROXY: "${BUILD_NO_PROXY:-}"
+
 x-database-env: &database-env
   POSTGRES_DB: "${POSTGRES_DB:-dailybits}"
   POSTGRES_USER: "${POSTGRES_USER:-postgres}"
@@ -5,7 +17,7 @@ x-database-env: &database-env
 
 services:
   db:
-    image: postgres:16-bookworm
+    image: "${POSTGRES_IMAGE:-postgres:16-bookworm}"
     restart: unless-stopped
     environment:
       <<: *database-env
@@ -19,8 +31,8 @@ services:
       retries: 10
 
   migrate:
-    build:
-      context: .
+    image: "${DAILYBITS_IMAGE:-dailybits:local}"
+    build: *app-build
     restart: "no"
     depends_on:
       db:
@@ -36,8 +48,8 @@ services:
     command: ["node", "scripts/container-start.mjs", "migrate"]
 
   app:
-    build:
-      context: .
+    image: "${DAILYBITS_IMAGE:-dailybits:local}"
+    build: *app-build
     restart: unless-stopped
     depends_on:
       db:
@@ -65,8 +77,8 @@ services:
       retries: 3
 
   scheduler:
-    build:
-      context: .
+    image: "${DAILYBITS_IMAGE:-dailybits:local}"
+    build: *app-build
     restart: unless-stopped
     depends_on:
       db:

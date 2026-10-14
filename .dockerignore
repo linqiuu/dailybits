@@ -10,6 +10,10 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.npmrc
+*.pem
+*.crt
+*.key
 browser-artifacts
 .impeccable
 question-banks
