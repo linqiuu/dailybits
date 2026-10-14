@@ -353,6 +353,7 @@ function CreatedItemCard({
             <Pencil className="size-3.5" />
             编辑
           </Button>
+          {icon === "question" && <Button variant="outline" size="sm" render={<Link href={`${viewHref}?tab=answers`} />} nativeButton={false}><CheckCircle2 className="size-3.5" />答题记录</Button>}
         </div>
       </CardContent>
     </Card>

@@ -26,6 +26,7 @@
     "@prisma/adapter-pg-worker": "^6.9.0",
     "@prisma/client": "^7.5.0",
     "@prisma/pg-worker": "^6.9.0",
+    "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "csv-parse": "^6.1.0",

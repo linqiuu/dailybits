@@ -287,11 +287,25 @@ model SchedulerState {
   updatedAt  DateTime @updatedAt
 }
 
+enum AnswerIdentityStatus {
+  PENDING
+  RESOLVED
+  NOT_FOUND
+}
+
 model QuestionAnswerEvent {
   id             String       @id @default(cuid())
   cardId         String
   receiver       String
   respondentId   String
+  respondentUserId String?
+  respondentNameSnapshot String?
+  respondentEmployeeNoSnapshot String?
+  identityStatus AnswerIdentityStatus @default(PENDING)
+  identityCapturedAt DateTime?
+  identityNextAttemptAt DateTime @default(now())
+  identityBackfilled Boolean @default(false)
+  questionContentSnapshot String? @db.Text
   questionId     String
   bankId         String
   selectedAnswer String
@@ -307,6 +321,8 @@ model QuestionAnswerEvent {
   @@index([bankId, answeredAt])
   @@index([questionId, answeredAt])
   @@index([respondentId, answeredAt])
+  @@index([identityStatus, identityNextAttemptAt])
+  @@index([respondentUserId, answeredAt])
 }
 
 model DigestPushLog {

@@ -7,6 +7,7 @@ import { drainDeliveryJobs, enqueueDueJobs } from "../lib/push/jobs.js";
 import { validatePushConfiguration } from "../lib/push/adapter.js";
 import { dateKey } from "../lib/time.js";
 import { syncAnswerEvents } from "../lib/qa-events.js";
+import { enrichAnswerIdentities } from "../lib/answers/identity.js";
 
 const missing = validatePushConfiguration();
 if (missing.length) throw new Error(`Scheduler configuration missing: ${missing.join(", ")}`);
@@ -53,7 +54,10 @@ const workerTimer = setInterval(startWorkers, 5000);
 function startAnswerSync() {
   if (syncingAnswers || stopping) return;
   syncingAnswers = true;
-  void syncAnswerEvents(prisma).catch(() => console.error("[Scheduler] Answer synchronization unavailable"))
+  void syncAnswerEvents(prisma)
+    .catch(() => console.error("[Scheduler] Answer synchronization unavailable"))
+    .then(() => enrichAnswerIdentities(prisma))
+    .catch(() => console.error("[Scheduler] Answer identity enrichment unavailable"))
     .finally(() => { syncingAnswers = false; });
 }
 const answerTimer = setInterval(startAnswerSync, 60000);

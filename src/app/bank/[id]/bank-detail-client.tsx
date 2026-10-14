@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BookOpenCheck, MessageSquareText, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { CommentSection } from "@/components/bank/comment-section";
 import { WorkbenchPanel } from "@/components/ui/workbench";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnswerRecords } from "@/components/bank/answer-records";
 import type { SubscriptionCadence, SubscriptionScheduleMode } from "@/types";
 
 const QUESTIONS_PER_PAGE = 30;
@@ -34,11 +36,13 @@ interface BankDetailClientProps {
     questionCount: number;
   };
   isCreator: boolean;
+  canViewAnswers?: boolean;
   subscriptionSlot?: React.ReactNode;
 }
 
-export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDetailClientProps) {
+export function BankDetailClient({ bank, isCreator, canViewAnswers = false, subscriptionSlot }: BankDetailClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [questionPage, setQuestionPage] = useState(1);
 
   const totalQuestionPages = Math.ceil(bank.questions.length / QUESTIONS_PER_PAGE);
@@ -117,6 +121,12 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
         {subscriptionSlot}
       </section>
 
+      <Tabs defaultValue={canViewAnswers && searchParams.get("tab") === "answers" ? "answers" : "questions"} className="space-y-4">
+        <TabsList variant="line">
+          <TabsTrigger value="questions">题目列表</TabsTrigger>
+          {canViewAnswers && <TabsTrigger value="answers">答题记录</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="questions">
       <Card className="content-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -188,6 +198,9 @@ export function BankDetailClient({ bank, isCreator, subscriptionSlot }: BankDeta
         </CardContent>
       </Card>
 
+        </TabsContent>
+        {canViewAnswers && <TabsContent value="answers"><AnswerRecords bankId={bank.id} /></TabsContent>}
+      </Tabs>
       <Card className="content-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">

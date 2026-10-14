@@ -27,11 +27,12 @@ export default async function BankDetailPage({ params }: PageProps) {
     },
   });
 
-  if (!bank || !canAccessBank(bank, session)) {
+  if (!bank || (!canAccessBank(bank, session) && !session?.user.isAdmin)) {
     notFound();
   }
 
   const isCreator = session?.user?.id === bank.creatorId;
+  const canViewAnswers = isCreator || session?.user.isAdmin === true;
 
   let initialSubscription: {
     id: string;
@@ -100,6 +101,7 @@ export default async function BankDetailPage({ params }: PageProps) {
           questionCount: bank.questions.filter((question) => isCreator || question.status === "PUBLISHED").length,
         }}
         isCreator={isCreator}
+        canViewAnswers={canViewAnswers}
         subscriptionSlot={
           session?.user?.id ? (
             <SubscriptionPanel

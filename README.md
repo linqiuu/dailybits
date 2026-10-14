@@ -159,6 +159,19 @@ Auth Hub 身份中如果包含 `X-User-Base64.departments[].department.id` 或�
 
 ## 卡片服务与答题回流
 
+### 网站答题明细与导出
+
+题库创建者和管理员可以在题库详情的「答题记录」页签查看个人答题明细；「我的内容」中的题库也提供直达入口。普通订阅者无权查看或导出其他人的个人记录。
+
+- 展示姓名、工号、题目、所选答案、正确答案、正确情况和答题时间，详情可查看资料采集时间和题目快照来源。
+- 支持姓名/工号/账号搜索，按题目、正确情况、日期筛选，以及最新/最早作答、错误/正确优先的全量排序。
+- Excel 导出当前筛选条件下的全部记录，不受当前页影响；单次最多 50000 条，超过时要求缩小范围，不会静默截断。工号按文本保留前导零，所有展示和导出时间采用北京时间。
+- 姓名与工号由 Scheduler 每分钟批量请求 Directory v1 `POST /directory/v1/users/batch-resolve` 补全。正式环境的 Directory Key 必须具备 `directory.user.read`，仅有部门搜索权限不够。优先使用 `DIRECTORY_API_BASE_URL` / `DIRECTORY_INNER_API_KEY`，也可复用 `INNER_API_BASE_URL` / `INNER_API_KEY`；密钥只保存在服务端环境变量中。
+- 人员目录失败不会丢弃答题记录：姓名、工号显示待补全并有限重试，尊重 `Retry-After`；目录未找到的账号每七天重新查询一次。不截取账号猜测工号，不覆盖已经采集的人员快照。
+- 更新部署时先执行 migration `20261014090000_answer_details`，然后同时更新 Web 和 Scheduler（Compose 的 `migrate` 服务会先行执行）。新增数据库字段不删除原有答题记录；历史记录的姓名/工号来自补全时的目录，并不代表答题当时的身份。旧记录没有题目快照时明确显示当前题目内容；新记录保存事件入库时的题目内容。
+
+同源接口为 `GET /api/banks/:id/answers` 与 `GET /api/banks/:id/answers/export`，两者均要求登录并校验题库创建者或管理员权限。它们不是卡片回调接口，不可豁免网关登录。现有 card-service 答题事件已包含账号和答题时间，本次明细功能不要求修改其事件契约。
+
 当 `PUSH_PROVIDER=card-service` 时，DailyBits 会把题目推送到 card-service `/send/qa`，并传入 `source_system=dailybits` 与 `business_id=Question.id`。如果配置了 `CARD_SERVICE_QA_ANSWER_CALLBACK_URL`，还会把答题回调地址和密钥随发卡请求传给 card-service。
 
 AI 新闻、GitHub 热榜和知识卡片会通过公司 Messaging v1 `POST /messaging/v1/cards/send` 发送 Markdown 卡片。Digest 内容使用翻页卡片，`content` 直接传 Markdown 数组；默认每页 3 条、最多 4 页。每次业务发送都会带 `Idempotency-Key`，429/503/网络超时会按 `Retry-After` 或指数退避重试，401/403/400 不会自动重试。`INNER_API_KEY` 只从环境变量读取，不要提交到仓库或日志。

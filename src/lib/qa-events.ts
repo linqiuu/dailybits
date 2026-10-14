@@ -18,13 +18,13 @@ export async function recordAnswerEvent(prisma: PrismaClient, body: Record<strin
   if (!cardId || !receiver || !respondentId || !questionId || !selectedAnswer || [cardId, receiver, respondentId, questionId].some((value) => value.length > 255) || Number.isNaN(answeredAt.getTime())) {
     throw new AnswerEventError(400, "Invalid QA answer event");
   }
-  const question = await prisma.question.findUnique({ where: { id: questionId }, select: { id: true, bankId: true, correctAnswer: true } });
+  const question = await prisma.question.findUnique({ where: { id: questionId }, select: { id: true, bankId: true, correctAnswer: true, content: true } });
   if (!question) throw new AnswerEventError(404, "Question not found");
   const correctAnswer = answer(body.correct_answer ?? body.correctAnswer) || answer(question.correctAnswer);
   if (!correctAnswer) throw new AnswerEventError(400, "Invalid correct answer");
   return prisma.questionAnswerEvent.upsert({
     where: { cardId_respondentId: { cardId, respondentId } },
-    create: { cardId, receiver, respondentId, questionId, bankId: question.bankId, selectedAnswer, correctAnswer, isCorrect: selectedAnswer === correctAnswer, answeredAt, sourceSystem: text(body.source_system ?? body.sourceSystem) || "card-service" },
+    create: { cardId, receiver, respondentId, questionId, bankId: question.bankId, selectedAnswer, correctAnswer, isCorrect: selectedAnswer === correctAnswer, answeredAt, sourceSystem: text(body.source_system ?? body.sourceSystem) || "card-service", questionContentSnapshot: question.content, identityBackfilled: Date.now() - answeredAt.getTime() > 600000 },
     update: {},
   });
 }
