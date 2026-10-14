@@ -17,8 +17,11 @@ import {
   type SubscriptionScheduleMode,
 } from "@/types";
 import { cn } from "@/lib/utils";
+import { SubscriptionPolicyFields } from "./subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
 
 export type ScheduleDraft = {
+  recommendedSubscriptionMode?: LearningSubscriptionMode;
   subscriptionScheduleMode: SubscriptionScheduleMode;
   subscriptionCadence: SubscriptionCadence;
   subscriptionWeekdays: number[];
@@ -40,6 +43,7 @@ function sortedTimes(times: string[]): string[] {
 
 export function defaultScheduleDraft(): ScheduleDraft {
   return {
+    recommendedSubscriptionMode: "CURRENT_EDITION",
     subscriptionScheduleMode: "CUSTOM",
     subscriptionCadence: "DAILY",
     subscriptionWeekdays: [],
@@ -85,6 +89,7 @@ export function SubscriptionScheduleForm({
 
   return (
     <div className={cn("space-y-4", compact && "space-y-3")}>
+      <SubscriptionPolicyFields label="推荐订阅模式" mode={value.recommendedSubscriptionMode ?? "CURRENT_EDITION"} onModeChange={mode => update({ recommendedSubscriptionMode: mode })} disabled={disabled} />
       <div className="grid gap-2 sm:grid-cols-2">
         <button
           type="button"

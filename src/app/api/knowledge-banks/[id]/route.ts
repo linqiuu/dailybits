@@ -1,3 +1,4 @@
+import { parseLearningMode, SubscriptionPolicyError } from "@/lib/subscriptions/policy";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, getSessionDepartmentKeys } from "@/lib/auth";
 import {
@@ -80,6 +81,7 @@ export async function GET(
       subscription: subscription && canManageSubscription(subscription, session?.user) ? subscription : null,
     });
   } catch (error) {
+    if (error instanceof SubscriptionPolicyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[GET /api/knowledge-banks/[id]]", error);
     return NextResponse.json(
       { error: "Failed to fetch knowledge bank" },
@@ -108,6 +110,7 @@ export async function PATCH(
 
     const body = await request.json();
     const data: {
+      recommendedSubscriptionMode?: "CURRENT_EDITION" | "FOLLOW_UPDATES";
       title?: string;
       description?: string | null;
       visibility?: KnowledgeVisibility;
@@ -116,6 +119,7 @@ export async function PATCH(
       generationPrompt?: string | null;
     } = {};
 
+    if (body.recommendedSubscriptionMode !== undefined) data.recommendedSubscriptionMode = parseLearningMode(body.recommendedSubscriptionMode, bank.recommendedSubscriptionMode);
     if (body.title !== undefined) {
       if (typeof body.title !== "string" || body.title.trim() === "") {
         return NextResponse.json(
@@ -180,6 +184,7 @@ export async function PATCH(
     });
     return NextResponse.json(updated);
   } catch (error) {
+    if (error instanceof SubscriptionPolicyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[PATCH /api/knowledge-banks/[id]]", error);
     return NextResponse.json(
       { error: "Failed to update knowledge bank" },
@@ -208,6 +213,7 @@ export async function DELETE(
     await prisma.knowledgeBank.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof SubscriptionPolicyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[DELETE /api/knowledge-banks/[id]]", error);
     return NextResponse.json(
       { error: "Failed to delete knowledge bank" },

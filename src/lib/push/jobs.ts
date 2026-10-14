@@ -4,7 +4,7 @@ import { canSubscribeContent } from "../content/access";
 import { getDigestFetchFailureCooldownMs, getDigestItemsForDate } from "../digest/delivery";
 import { isDeliverableDigestType } from "../digest/options";
 import { getAiNewsDigestCacheDate } from "../digest/sources";
-import { selectNextKnowledgePoint } from "../knowledge/delivery";
+import { runnableSubscriptionWhere, selectLearningQuestion, selectLearningKnowledge, settleQuestionSubscription, settleKnowledgeSubscription } from "../subscriptions/lifecycle";
 import { isoWeekdayInTimeZone, isValidPushTime } from "../subscriptions/schedule";
 import { isWorkingDay } from "../subscriptions/workdays";
 import { atZonedTime, dateKey } from "../time";
@@ -29,17 +29,17 @@ export async function enqueueDueJobs(prisma: PrismaClient, now: Date, timezone: 
   const earliest = new Date(Math.max(now.getTime() - DELIVERY_WINDOW_MS(), previous?.lastTickAt.getTime() ?? now.getTime() - 60000));
   const days = [...new Set([dateKey(earliest, timezone), dateKey(now, timezone)])];
   const [questions, knowledge, digests] = await Promise.all([
-    prisma.subscription.findMany({ where: { isActive: true }, include: { bank: true } }),
-    prisma.knowledgeSubscription.findMany({ where: { isActive: true } }),
+    prisma.subscription.findMany({ where: runnableSubscriptionWhere, include: { bank: true } }),
+    prisma.knowledgeSubscription.findMany({ where: runnableSubscriptionWhere }),
     prisma.digestSubscription.findMany({ where: { isActive: true } }),
   ]);
   const rows: Prisma.DeliveryJobCreateManyInput[] = [];
-  function add(kind: "QUESTION" | "KNOWLEDGE" | "DIGEST", sub: { id: string; targetType: "USER" | "GROUP"; targetId: string; createdAt: Date }, times: string[], weekdays?: number[]) {
+  function add(kind: "QUESTION" | "KNOWLEDGE" | "DIGEST", sub: { id: string; targetType: "USER" | "GROUP"; targetId: string; createdAt: Date; startedAt?: Date; generation?: number }, times: string[], weekdays?: number[]) {
     for (const day of days) for (const pushTime of new Set(times.filter(isValidPushTime))) {
       const scheduledAt = atZonedTime(day, pushTime, timezone);
       if (weekdays && !weekdays.includes(isoWeekdayInTimeZone(scheduledAt, timezone))) continue;
-      if (scheduledAt < earliest || scheduledAt > now || scheduledAt < sub.createdAt || !isWorkingDay(scheduledAt, timezone)) continue;
-      rows.push({ id: randomUUID(), dedupeKey: jobDedupeKey(kind, sub.id, day, pushTime), kind, subscriptionId: sub.id, targetType: sub.targetType, targetId: sub.targetId, scheduleDate: day, pushTime, scheduledAt, expiresAt: new Date(scheduledAt.getTime() + DELIVERY_WINDOW_MS()), nextAttemptAt: now });
+      if (scheduledAt < earliest || scheduledAt > now || scheduledAt < (sub.startedAt ?? sub.createdAt) || !isWorkingDay(scheduledAt, timezone)) continue;
+      rows.push({ id: randomUUID(), dedupeKey: jobDedupeKey(kind, sub.id, day, pushTime), kind, subscriptionId: sub.id, subscriptionGeneration: sub.generation ?? 0, targetType: sub.targetType, targetId: sub.targetId, scheduleDate: day, pushTime, scheduledAt, expiresAt: new Date(scheduledAt.getTime() + DELIVERY_WINDOW_MS()), nextAttemptAt: now });
     }
   }
   for (const sub of questions) {
@@ -89,28 +89,24 @@ async function preparePayload(prisma: PrismaClient, job: DeliveryJob, timezone: 
   const receiver = await receiverFor(prisma, job);
   if (job.kind === "QUESTION") {
     const sub = await prisma.subscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });
-    if (!sub?.isActive || !(await allowedFor(prisma, job, sub.bank))) return null;
-    let cycle = sub.currentCycle;
-    let question = await prisma.question.findFirst({ where: { bankId: sub.bankId, status: "PUBLISHED", pushLogs: { none: { targetType: sub.targetType, targetId: sub.targetId, cycle, generation: sub.generation } } }, orderBy: { createdAt: "desc" } });
-    if (!question && sub.endCondition === "REPEAT_N_TIMES" && cycle + 1 < sub.repeatCount) {
-      cycle += 1;
-      question = await prisma.question.findFirst({ where: { bankId: sub.bankId, status: "PUBLISHED" }, orderBy: { createdAt: "desc" } });
-    }
-    if (!question) {
-      if (await prisma.question.count({ where: { bankId: sub.bankId, status: "PUBLISHED" } })) {
-        await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } });
-      }
+    if (!sub?.isActive || sub.generation !== job.subscriptionGeneration || job.scheduledAt < sub.startedAt || !(await allowedFor(prisma, job, sub.bank))) return null;
+    const selected = await selectLearningQuestion(prisma, sub);
+    if (!selected) {
+      await settleQuestionSubscription(prisma, sub.id, sub.generation);
       return null;
     }
+    const { question, cycle } = selected;
+    await prisma.subscription.updateMany({ where: { id: sub.id, generation: sub.generation, ...runnableSubscriptionWhere }, data: { status: "ACTIVE" } });
     return { payload: { ...buildPayload(receiver, sub.bank.title, question, { authorId: sub.bank.creatorId, businessId: question.id, domain: sub.bank.title, scene: "daily-question" }), idempotencyKey: job.dedupeKey }, cycle, generation: sub.generation };
   }
   if (job.kind === "KNOWLEDGE") {
     const sub = await prisma.knowledgeSubscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });
-    if (!sub?.isActive || !(await allowedFor(prisma, job, sub.bank))) return null;
+    if (!sub?.isActive || sub.generation !== job.subscriptionGeneration || job.scheduledAt < sub.startedAt || !(await allowedFor(prisma, job, sub.bank))) return null;
     if (await prisma.knowledgePushLog.findUnique({ where: { subscriptionId_pushDate_pushTime: { subscriptionId: sub.id, pushDate: job.scheduleDate, pushTime: job.pushTime } } })) return null;
-    const point = await selectNextKnowledgePoint(prisma, sub.id, sub.bankId);
-    if (!point) return null;
-    return { payload: { receiver, title: sub.bank.title, items: [point.content], knowledgeBankId: sub.bankId, knowledgePointId: point.id, idempotencyKey: job.dedupeKey } };
+    const point = await selectLearningKnowledge(prisma, sub);
+    if (!point) { await settleKnowledgeSubscription(prisma, sub.id, sub.generation); return null; }
+    await prisma.knowledgeSubscription.updateMany({ where: { id: sub.id, generation: sub.generation, ...runnableSubscriptionWhere }, data: { status: "ACTIVE" } });
+    return { payload: { receiver, title: sub.bank.title, items: [point.content], knowledgeBankId: sub.bankId, knowledgePointId: point.id, idempotencyKey: job.dedupeKey }, generation: sub.generation };
   }
   const sub = await prisma.digestSubscription.findUnique({ where: { id: job.subscriptionId } });
   if (!sub?.isActive || !isDeliverableDigestType(sub.digestType)) return null;
@@ -126,11 +122,13 @@ async function stillActive(prisma: PrismaClient, job: DeliveryJob, stored: Store
     const sub = await prisma.subscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });
     const questionId = "businessId" in stored.payload ? stored.payload.businessId : undefined;
     const question = questionId ? await prisma.question.findUnique({ where: { id: questionId }, select: { status: true, bankId: true } }) : null;
-    return !!sub?.isActive && sub.generation === stored.generation && question?.status === "PUBLISHED" && question.bankId === sub.bankId && await allowedFor(prisma, job, sub.bank);
+    return !!sub?.isActive && sub.generation === stored.generation && job.scheduledAt >= sub.startedAt && question?.status === "PUBLISHED" && question.bankId === sub.bankId && (sub.mode === "FOLLOW_UPDATES" || sub.editionQuestionIds.includes(questionId!)) && await allowedFor(prisma, job, sub.bank);
   }
   if (job.kind === "KNOWLEDGE") {
     const sub = await prisma.knowledgeSubscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });
-    return !!sub?.isActive && await allowedFor(prisma, job, sub.bank);
+    const pointId = "knowledgePointId" in stored.payload ? stored.payload.knowledgePointId : undefined;
+    const point = pointId ? await prisma.knowledgePoint.findUnique({ where: { id: pointId }, select: { bankId: true } }) : null;
+    return !!sub?.isActive && sub.generation === (stored.generation ?? 0) && job.scheduledAt >= sub.startedAt && point?.bankId === sub.bankId && (sub.mode === "FOLLOW_UPDATES" || sub.editionPointIds.includes(pointId!)) && await allowedFor(prisma, job, sub.bank);
   }
   return !!(await prisma.digestSubscription.findUnique({ where: { id: job.subscriptionId } }))?.isActive;
 }
@@ -143,8 +141,10 @@ async function finishAccepted(prisma: PrismaClient, job: DeliveryJob, stored: St
     if (job.kind === "QUESTION" && "businessId" in payload && payload.businessId) {
       await tx.pushLog.upsert({ where: { deliveryJobId: job.id }, create: { deliveryJobId: job.id, subscriptionId: job.subscriptionId, targetType: job.targetType, targetId: job.targetId, questionId: payload.businessId, cycle: stored.cycle, generation: stored.generation }, update: {} });
       await tx.subscription.updateMany({ where: { id: job.subscriptionId, generation: stored.generation }, data: { currentCycle: stored.cycle } });
+      await settleQuestionSubscription(tx, job.subscriptionId, stored.generation ?? 0);
     } else if (job.kind === "KNOWLEDGE" && "knowledgePointId" in payload) {
-      await tx.knowledgePushLog.upsert({ where: { subscriptionId_pushDate_pushTime: { subscriptionId: job.subscriptionId, pushDate: job.scheduleDate, pushTime: job.pushTime } }, create: { subscriptionId: job.subscriptionId, targetType: job.targetType, targetId: job.targetId, bankId: payload.knowledgeBankId, knowledgePointId: payload.knowledgePointId, contentSnapshot: payload.items[0], pushDate: job.scheduleDate, pushTime: job.pushTime }, update: {} });
+      await tx.knowledgePushLog.upsert({ where: { subscriptionId_pushDate_pushTime: { subscriptionId: job.subscriptionId, pushDate: job.scheduleDate, pushTime: job.pushTime } }, create: { subscriptionId: job.subscriptionId, generation: stored.generation ?? 0, targetType: job.targetType, targetId: job.targetId, bankId: payload.knowledgeBankId, knowledgePointId: payload.knowledgePointId, contentSnapshot: payload.items[0], pushDate: job.scheduleDate, pushTime: job.pushTime }, update: {} });
+      await settleKnowledgeSubscription(tx, job.subscriptionId, stored.generation ?? 0);
     } else if (job.kind === "DIGEST" && "digestType" in payload) {
       const key = { targetType: job.targetType, targetId: job.targetId, digestType: payload.digestType, digestDate: job.scheduleDate, pushTime: job.pushTime };
       await tx.digestPushLog.upsert({ where: { targetType_targetId_digestType_digestDate_pushTime: key }, create: key, update: {} });

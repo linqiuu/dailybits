@@ -4,6 +4,8 @@ import {
   type SubscriptionCadence,
   type SubscriptionScheduleMode,
 } from "../../types";
+import { LEARNING_MODES } from "./policy";
+import type { LearningSubscriptionMode } from "../../types";
 
 export const SUBSCRIPTION_SCHEDULE_MODES = ["CUSTOM", "FIXED"] as const;
 export const SUBSCRIPTION_CADENCES = ["DAILY", "WEEKLY"] as const;
@@ -18,6 +20,7 @@ export const ISO_WEEKDAYS = [
 ] as const;
 
 export type QuestionBankScheduleInput = {
+  recommendedSubscriptionMode?: unknown;
   subscriptionScheduleMode?: unknown;
   subscriptionCadence?: unknown;
   subscriptionWeekdays?: unknown;
@@ -25,6 +28,7 @@ export type QuestionBankScheduleInput = {
 };
 
 export type QuestionBankScheduleFields = {
+  recommendedSubscriptionMode?: LearningSubscriptionMode;
   subscriptionScheduleMode: SubscriptionScheduleMode;
   subscriptionCadence: SubscriptionCadence;
   subscriptionWeekdays: number[];
@@ -83,6 +87,8 @@ export function parseQuestionBankSchedule(
   body: QuestionBankScheduleInput,
   current?: Partial<QuestionBankScheduleFields>,
 ): ScheduleParseResult {
+  const recommended = body.recommendedSubscriptionMode === undefined ? current?.recommendedSubscriptionMode ?? "CURRENT_EDITION" : body.recommendedSubscriptionMode;
+  if (!LEARNING_MODES.includes(recommended as LearningSubscriptionMode)) return { ok: false, error: "推荐订阅模式无效" };
   const mode =
     body.subscriptionScheduleMode === undefined
       ? current?.subscriptionScheduleMode ?? "CUSTOM"
@@ -148,6 +154,7 @@ export function parseQuestionBankSchedule(
   return {
     ok: true,
     value: {
+      recommendedSubscriptionMode: recommended as LearningSubscriptionMode,
       subscriptionScheduleMode: mode as SubscriptionScheduleMode,
       subscriptionCadence: resolvedCadence,
       subscriptionWeekdays: resolvedWeekdays,

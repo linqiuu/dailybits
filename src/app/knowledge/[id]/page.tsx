@@ -3,6 +3,7 @@ import { getCurrentSession, getSessionDepartmentKeys } from "@/lib/auth";
 import { canAccessKnowledgeBank } from "@/lib/knowledge/access";
 import { prisma } from "@/lib/prisma";
 import { KnowledgeDetailClient } from "./knowledge-detail-client";
+import { knowledgeProgress } from "@/lib/subscriptions/lifecycle";
 
 export default async function KnowledgeBankPage({
   params,
@@ -37,14 +38,10 @@ export default async function KnowledgeBankPage({
             bankId: id,
           },
         },
-        select: {
-          id: true,
-          pushTimes: true,
-          isActive: true,
-        },
       })
     : null;
 
+  const progress = subscription ? await knowledgeProgress(prisma, subscription) : { pointCount: bank._count.points, pushedCount: 0 };
   return (
     <div className="page-enter">
       <KnowledgeDetailClient
@@ -54,7 +51,8 @@ export default async function KnowledgeBankPage({
         }}
         isCreator={bank.creatorId === session?.user?.id}
         isLoggedIn={!!session?.user?.id}
-        subscription={subscription?.isActive ? subscription : null}
+        subscription={subscription}
+        progress={progress}
       />
     </div>
   );

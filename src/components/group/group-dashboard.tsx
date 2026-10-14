@@ -27,6 +27,11 @@ import { toast } from "sonner";
 import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
 import { Search, Clock, BookOpen, Users, CheckCircle, Bell, BookMarked } from "lucide-react";
 import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
+import { SubscriptionPanel } from "@/components/bank/subscription-panel";
+import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
+import { formatSubscriptionSchedule } from "@/lib/subscriptions/schedule";
+import { learningStatusLabels } from "@/lib/subscriptions/policy";
+import type { LearningSubscriptionMode, LearningSubscriptionStatus } from "@/types";
 import { KnowledgeExplorer } from "@/components/knowledge/knowledge-explorer";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
@@ -42,12 +47,21 @@ interface SubscriptionItem {
   bankId: string;
   pushTimes: string[];
   isActive: boolean;
+  mode: LearningSubscriptionMode;
+  status: LearningSubscriptionStatus;
+  endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+  repeatCount?: number;
+  currentCycle?: number;
   subscriber?: { id: string; name: string | null; uid: string | null } | null;
   bank: {
     id: string;
     title: string;
     description: string | null;
     subscriberCount: number;
+    subscriptionScheduleMode: "CUSTOM" | "FIXED";
+    subscriptionCadence: "DAILY" | "WEEKLY";
+    subscriptionWeekdays: number[];
+    subscriptionPushTimes: string[];
     _count: { questions: number };
   };
   questionCount: number;
@@ -65,6 +79,11 @@ interface KnowledgeSubscriptionItem {
   bankId: string;
   pushTimes: string[];
   isActive: boolean;
+  mode: LearningSubscriptionMode;
+  status: LearningSubscriptionStatus;
+  endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+  repeatCount?: number;
+  currentCycle?: number;
   subscriber?: { id: string; name: string | null; uid: string | null } | null;
   bank: {
     id: string;
@@ -84,6 +103,11 @@ interface GroupKnowledgeSubscriptionsResponse {
 }
 
 interface Bank {
+  recommendedSubscriptionMode: LearningSubscriptionMode;
+  subscriptionScheduleMode: "CUSTOM" | "FIXED";
+  subscriptionCadence: "DAILY" | "WEEKLY";
+  subscriptionWeekdays: number[];
+  subscriptionPushTimes: string[];
   id: string;
   title: string;
   description: string | null;
@@ -485,11 +509,15 @@ function GroupBankCard({
   onSubscribed: () => void;
 }) {
   const { data: session, status: sessionStatus } = useSession();
-  const isSubscribed = !!subscription;
+  const isSubscribed = !!subscription && subscription.status !== "COMPLETED" && subscription.status !== "CANCELLED";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
   const [newTime, setNewTime] = useState("");
   const [subscribing, setSubscribing] = useState(false);
+  const [mode, setMode] = useState(bank.recommendedSubscriptionMode);
+  const [endCondition, setEndCondition] = useState<"END_AFTER_COMPLETE" | "REPEAT_N_TIMES">("END_AFTER_COMPLETE");
+  const [repeatCount, setRepeatCount] = useState(0);
+  const fixedSchedule = bank.subscriptionScheduleMode === "FIXED";
 
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
 
@@ -511,7 +539,7 @@ function GroupBankCard({
     setPushTimes((prev) => prev.filter((x) => x !== t));
 
   const handleSubscribe = async () => {
-    if (pushTimes.length === 0) {
+    if (!fixedSchedule && pushTimes.length === 0) {
       toast.error("请至少添加一个推送时间");
       return;
     }
@@ -520,7 +548,7 @@ function GroupBankCard({
       const res = await fetch(`/api/group/${groupId}/subscriptions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankId: bank.id, pushTimes }),
+        body: JSON.stringify({ bankId: bank.id, mode, endCondition, repeatCount, ...(bank.subscriptionScheduleMode === "FIXED" ? {} : { pushTimes }) }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -551,7 +579,7 @@ function GroupBankCard({
           </Link>
           {isSubscribed && (
             <Badge className="shrink-0 border-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              已订阅
+              {subscription ? learningStatusLabels[subscription.status] : "已订阅"}
             </Badge>
           )}
         </div>
@@ -615,6 +643,8 @@ function GroupBankCard({
                   <DialogTitle>订阅「{bank.title}」</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
+                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount} onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={subscribing} />
+                  {fixedSchedule ? <p className="text-sm text-muted-foreground">{formatSubscriptionSchedule(bank)}</p> : <>
                   <div className="space-y-2">
                     <Label>每日推送时间</Label>
                     <p className="text-xs text-muted-foreground">
@@ -652,6 +682,7 @@ function GroupBankCard({
                   {pushTimes.length === 0 && (
                     <p className="text-xs text-muted-foreground">点击「添加」设定推送时间</p>
                   )}
+                  </>}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={subscribing}>
@@ -805,194 +836,15 @@ function QuestionSubscriptionsSection({
 
 /* --- subscription management card (kept from original) --- */
 
-function GroupSubscriptionCard({
-  sub,
-  groupId,
-  index,
-  onUnsubscribe,
-  onUpdate,
-}: {
-  sub: SubscriptionItem;
-  groupId: string;
-  index: number;
-  onUnsubscribe: () => void;
-  onUpdate: () => void;
+function GroupSubscriptionCard({ sub, groupId, index, onUpdate }: {
+  sub: SubscriptionItem; groupId: string; index: number; onUnsubscribe: () => void; onUpdate: () => void;
 }) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [pushTimes, setPushTimes] = useState<string[]>(sub.pushTimes);
-  const [newTime, setNewTime] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const total = sub.questionCount;
-  const pushed = sub.pushedCount;
-  const pct = total > 0 ? Math.min(100, (pushed / total) * 100) : 0;
-  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
-
-  const addTime = () => {
-    const val = newTime.trim();
-    if (!val || !/^\d{2}:\d{2}$/.test(val)) {
-      toast.error("请输入有效的 HH:MM 格式时间");
-      return;
-    }
-    if (pushTimes.includes(val)) {
-      toast.error("该时间已存在");
-      return;
-    }
-    if (atTimeLimit) {
-      toast.error(`推送时间不能超过 ${MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个`);
-      return;
-    }
-    setPushTimes((prev) => [...prev, val].sort());
-    setNewTime("");
-  };
-
-  const removeTime = (t: string) => {
-    setPushTimes((prev) => prev.filter((x) => x !== t));
-  };
-
-  const handleSave = async () => {
-    if (pushTimes.length === 0) {
-      toast.error("请至少保留一个推送时间");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(
-        `/api/group/${groupId}/subscriptions/${sub.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pushTimes }),
-        }
-      );
-      if (!res.ok) {
-        const d = await res.json();
-        toast.error(d.error ?? "更新失败");
-        return;
-      }
-      toast.success("推送时间已更新");
-      setEditOpen(false);
-      onUpdate();
-    } catch {
-      toast.error("更新失败，请稍后重试");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Card
-      className="paper-rise card-hover"
-      style={{ animationDelay: `${index * 70}ms` }}
-    >
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <Link href={`/bank/${sub.bank.id}`} className="hover:underline">
-              <CardTitle className="text-base font-semibold">
-                {sub.bank.title}
-              </CardTitle>
-            </Link>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            订阅人：{sub.subscriber?.name}
-            {sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}
-          </p>
-          {sub.bank.description && (
-            <p className="truncate text-xs text-muted-foreground">
-              {sub.bank.description}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            {sub.pushTimes.map((t) => (
-              <Badge key={t} variant="secondary">
-                <Clock className="mr-0.5 size-2.5" />
-                {t}
-              </Badge>
-            ))}
-          </div>
-          <div className="space-y-1">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary/70 transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {pushed} / {total} 题，{sub.bank.subscriberCount} 人订阅过
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2">
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogTrigger className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted">
-              编辑时间
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>编辑推送时间</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    type="time"
-                    value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={addTime}
-                    disabled={atTimeLimit}
-                  >
-                    添加
-                  </Button>
-                </div>
-                {atTimeLimit && (
-                  <p className="text-xs text-amber-600">
-                    已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {pushTimes.map((t) => (
-                    <Badge
-                      key={t}
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => removeTime(t)}
-                    >
-                      {t} ×
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setEditOpen(false)}
-                  disabled={saving}
-                >
-                  取消
-                </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  保存
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={onUnsubscribe}
-          >
-            取消订阅
-          </Button>
-        </div>
-      </CardHeader>
-    </Card>
-  );
+  return <Card className="paper-rise" style={{ animationDelay: `${index * 70}ms` }}>
+    <CardHeader><CardTitle><Link href={`/bank/${sub.bankId}`}>{sub.bank.title}</Link></CardTitle>
+      <p className="text-xs text-muted-foreground">订阅人：{sub.subscriber?.name}{sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}</p></CardHeader>
+    <CardContent><SubscriptionPanel framed={false} bankId={sub.bankId} targetType="GROUP" targetId={groupId}
+      bankSchedule={sub.bank} initialSubscription={sub} totalQuestions={sub.questionCount} pushedCount={sub.pushedCount} onChanged={onUpdate} /></CardContent>
+  </Card>;
 }
 
 function KnowledgeSubscriptionsTab({
@@ -1049,182 +901,14 @@ function KnowledgeSubscriptionsTab({
   );
 }
 
-function GroupKnowledgeSubscriptionCard({
-  sub,
-  groupId,
-  index,
-  onUnsubscribe,
-  onUpdate,
-}: {
-  sub: KnowledgeSubscriptionItem;
-  groupId: string;
-  index: number;
-  onUnsubscribe: () => void;
-  onUpdate: () => void;
+function GroupKnowledgeSubscriptionCard({ sub, groupId, index, onUpdate }: {
+  sub: KnowledgeSubscriptionItem; groupId: string; index: number; onUnsubscribe: () => void; onUpdate: () => void;
 }) {
-  const [editOpen, setEditOpen] = useState(false);
-  const [pushTimes, setPushTimes] = useState<string[]>(sub.pushTimes);
-  const [newTime, setNewTime] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
-
-  const addTime = () => {
-    const val = newTime.trim();
-    if (!val || !/^\d{2}:\d{2}$/.test(val)) {
-      toast.error("请输入有效的 HH:MM 格式时间");
-      return;
-    }
-    if (pushTimes.includes(val)) {
-      toast.error("该时间已存在");
-      return;
-    }
-    if (atTimeLimit) {
-      toast.error(`推送时间不能超过 ${MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个`);
-      return;
-    }
-    setPushTimes((prev) => [...prev, val].sort());
-    setNewTime("");
-  };
-
-  const removeTime = (time: string) => {
-    setPushTimes((prev) => prev.filter((item) => item !== time));
-  };
-
-  const handleSave = async () => {
-    if (pushTimes.length === 0) {
-      toast.error("请至少保留一个推送时间");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/knowledge-subscriptions/${sub.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-group-id": groupId,
-        },
-        body: JSON.stringify({ pushTimes }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error ?? "更新失败");
-        return;
-      }
-      toast.success("推送时间已更新");
-      setEditOpen(false);
-      onUpdate();
-    } catch {
-      toast.error("更新失败，请稍后重试");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Card
-      className="paper-rise card-hover"
-      style={{ animationDelay: `${index * 70}ms` }}
-    >
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2">
-            <Link href={`/knowledge/${sub.bank.id}`} className="hover:underline">
-              <CardTitle className="text-base font-semibold">
-                {sub.bank.title}
-              </CardTitle>
-            </Link>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            订阅人：{sub.subscriber?.name}
-            {sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}
-          </p>
-          {sub.bank.description && (
-            <p className="truncate text-xs text-muted-foreground">
-              {sub.bank.description}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            {sub.pushTimes.map((time) => (
-              <Badge key={time} variant="secondary">
-                <Clock className="mr-0.5 size-2.5" />
-                {time}
-              </Badge>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {sub.pushedCount} 次推送，{sub.pointCount} 张知识卡，{" "}
-            {sub.bank.subscriberCount} 人订阅过
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col gap-2">
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogTrigger className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium transition-colors hover:bg-muted">
-              编辑时间
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>编辑推送时间</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    type="time"
-                    value={newTime}
-                    onChange={(event) => setNewTime(event.target.value)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={addTime}
-                    disabled={atTimeLimit}
-                  >
-                    添加
-                  </Button>
-                </div>
-                {atTimeLimit && (
-                  <p className="text-xs text-amber-600">
-                    已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {pushTimes.map((time) => (
-                    <Badge
-                      key={time}
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => removeTime(time)}
-                    >
-                      {time} ×
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setEditOpen(false)}
-                  disabled={saving}
-                >
-                  取消
-                </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  保存
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={onUnsubscribe}
-          >
-            取消订阅
-          </Button>
-        </div>
-      </CardHeader>
-    </Card>
-  );
+  return <Card className="paper-rise" style={{ animationDelay: `${index * 70}ms` }}>
+    <CardHeader><CardTitle><Link href={`/knowledge/${sub.bankId}`}>{sub.bank.title}</Link></CardTitle>
+      <p className="text-xs text-muted-foreground">订阅人：{sub.subscriber?.name}{sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}</p></CardHeader>
+    <CardContent><SubscriptionPanel framed={false} kind="KNOWLEDGE" bankId={sub.bankId} targetType="GROUP" targetId={groupId}
+      bankSchedule={{ subscriptionScheduleMode: "CUSTOM", subscriptionCadence: "DAILY", subscriptionWeekdays: [], subscriptionPushTimes: [] }}
+      initialSubscription={sub} totalQuestions={sub.pointCount} pushedCount={sub.pushedCount} onChanged={onUpdate} /></CardContent>
+  </Card>;
 }

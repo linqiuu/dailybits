@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import type { KnowledgePushPayload, TargetType } from "../../types";
 import { pushToTarget } from "../push/adapter";
+import { selectLearningKnowledge, settleKnowledgeSubscription } from "../subscriptions/lifecycle";
 
 type KnowledgeSubscriptionForPush = Awaited<
   ReturnType<PrismaClient["knowledgeSubscription"]["findMany"]>
@@ -42,31 +43,8 @@ export async function selectNextKnowledgePoint(
   subscriptionId: string,
   bankId: string,
 ) {
-  const lastLog = await prisma.knowledgePushLog.findFirst({
-    where: { subscriptionId },
-    orderBy: { pushedAt: "desc" },
-    include: {
-      knowledgePoint: {
-        select: { orderIndex: true },
-      },
-    },
-  });
-
-  if (lastLog?.knowledgePoint) {
-    const next = await prisma.knowledgePoint.findFirst({
-      where: {
-        bankId,
-        orderIndex: { gt: lastLog.knowledgePoint.orderIndex },
-      },
-      orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
-    });
-    if (next) return next;
-  }
-
-  return prisma.knowledgePoint.findFirst({
-    where: { bankId },
-    orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }],
-  });
+  const sub = await prisma.knowledgeSubscription.findUnique({ where: { id: subscriptionId } });
+  return sub?.bankId === bankId ? selectLearningKnowledge(prisma, sub) : null;
 }
 
 export async function pushKnowledgeToTarget(
@@ -99,6 +77,7 @@ export async function pushKnowledgeSubscription(
   pushTime: string,
   timezone: string,
 ): Promise<boolean> {
+  if (!sub.isActive) return false;
   const pushDate = getDateInTimezone(new Date(), timezone);
   const alreadyPushed = await prisma.knowledgePushLog.findUnique({
     where: {
@@ -113,7 +92,7 @@ export async function pushKnowledgeSubscription(
 
   const point = await selectNextKnowledgePoint(prisma, sub.id, sub.bankId);
   if (!point) {
-    console.warn(`[Knowledge] No points for bank ${sub.bankId}`);
+    await settleKnowledgeSubscription(prisma, sub.id, sub.generation);
     return false;
   }
 
@@ -145,6 +124,7 @@ export async function pushKnowledgeSubscription(
   await prisma.knowledgePushLog.create({
     data: {
       subscriptionId: sub.id,
+      generation: sub.generation,
       targetType: sub.targetType,
       targetId: sub.targetId,
       bankId: sub.bankId,
@@ -154,6 +134,8 @@ export async function pushKnowledgeSubscription(
       pushTime,
     },
   });
+
+  await settleKnowledgeSubscription(prisma, sub.id, sub.generation);
 
   console.log(`[Knowledge] Pushed ${sub.bankId} to ${sub.targetType}:${sub.targetId}`);
   return true;

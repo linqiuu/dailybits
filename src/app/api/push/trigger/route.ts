@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { selectQuestion } from "@/lib/push/selector";
+import { selectLearningQuestion, settleQuestionSubscription } from "@/lib/subscriptions/lifecycle";
 import { pushToTarget } from "@/lib/push/adapter";
 import { buildPayload } from "@/lib/push/payload";
 import { getCurrentSession, isAdminSession } from "@/lib/auth";
@@ -43,17 +43,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const question = await selectQuestion(
-      subscription.targetType as "USER" | "GROUP",
-      subscription.targetId,
-      subscription.bankId,
-    );
-    if (!question) {
+    const selected = await selectLearningQuestion(prisma, subscription);
+    if (!selected) {
+      await settleQuestionSubscription(prisma, subscription.id, subscription.generation);
       return NextResponse.json(
         { error: "No question available to push" },
         { status: 404 }
       );
     }
+    const { question, cycle } = selected;
 
     let receiver = subscription.targetId;
     if (subscription.targetType === "USER") {
@@ -75,10 +73,12 @@ export async function POST(request: NextRequest) {
           targetId: subscription.targetId,
           questionId: question.id,
           subscriptionId: subscription.id,
-          cycle: subscription.currentCycle,
+          cycle,
           generation: subscription.generation,
         },
       });
+      await prisma.subscription.updateMany({ where: { id: subscription.id, generation: subscription.generation }, data: { currentCycle: cycle } });
+      await settleQuestionSubscription(prisma, subscription.id, subscription.generation);
       return NextResponse.json({
         success: true,
         message: `Pushed to ${subscription.targetType}:${subscription.targetId}`,

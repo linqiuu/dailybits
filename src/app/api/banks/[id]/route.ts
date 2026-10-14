@@ -97,6 +97,8 @@ export async function GET(
         ? {
             id: subscription.id,
             isActive: subscription.isActive,
+            mode: subscription.mode,
+            status: subscription.status,
             pushTimes: subscription.pushTimes,
             endCondition: subscription.endCondition,
             repeatCount: subscription.repeatCount,
@@ -155,6 +157,7 @@ export async function PATCH(
       subscriptionCadence?: "DAILY" | "WEEKLY";
       subscriptionWeekdays?: number[];
       subscriptionPushTimes?: string[];
+      recommendedSubscriptionMode?: "CURRENT_EDITION" | "FOLLOW_UPDATES";
     } = {};
     if (title !== undefined) {
       if (typeof title !== "string" || title.trim() === "") {
@@ -258,6 +261,7 @@ export async function PATCH(
     }
 
     const schedule = parseQuestionBankSchedule(body, {
+      recommendedSubscriptionMode: existing.recommendedSubscriptionMode,
       subscriptionScheduleMode: existing.subscriptionScheduleMode,
       subscriptionCadence: existing.subscriptionCadence,
       subscriptionWeekdays: existing.subscriptionWeekdays,

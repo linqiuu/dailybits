@@ -1,3 +1,4 @@
+import { parseLearningMode, SubscriptionPolicyError } from "@/lib/subscriptions/policy";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession, getSessionDepartmentKeys, type AppSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
         where: {
           targetType: resolvedTargetType,
           targetId: resolvedTargetId,
-          isActive: true,
+          status: { in: ["ACTIVE", "WAITING", "PAUSED"] },
         },
         select: { bankId: true },
       });
@@ -167,6 +168,7 @@ export async function GET(request: NextRequest) {
       subscriptionCount,
     });
   } catch (error) {
+    if (error instanceof SubscriptionPolicyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[GET /api/knowledge-banks]", error);
     return NextResponse.json(
       { error: "Failed to fetch knowledge banks" },
@@ -206,6 +208,7 @@ export async function POST(request: NextRequest) {
             ? description.trim()
             : null,
         creatorId: session.user.id,
+        recommendedSubscriptionMode: parseLearningMode(body.recommendedSubscriptionMode, "FOLLOW_UPDATES"),
         visibility: parsed.visibility,
         visibleDepartments: parsed.visibleDepartments,
         visibleDepartmentNames: parsed.visibleDepartmentNames,
@@ -224,6 +227,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(bank);
   } catch (error) {
+    if (error instanceof SubscriptionPolicyError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error("[POST /api/knowledge-banks]", error);
     return NextResponse.json(
       { error: "Failed to create knowledge bank" },

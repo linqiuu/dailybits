@@ -19,6 +19,7 @@ interface Bank {
   answerCount: number;
   correctAnswerCount: number;
   answererCount: number;
+  recommendedSubscriptionMode: "CURRENT_EDITION" | "FOLLOW_UPDATES";
   subscriptionScheduleMode: "CUSTOM" | "FIXED";
   subscriptionCadence: "DAILY" | "WEEKLY";
   subscriptionWeekdays: number[];
@@ -153,6 +154,7 @@ export function BankExplorer({
                   answerCount={bank.answerCount}
                   correctAnswerCount={bank.correctAnswerCount}
                   answererCount={bank.answererCount}
+                  recommendedSubscriptionMode={bank.recommendedSubscriptionMode}
                   subscriptionScheduleMode={bank.subscriptionScheduleMode}
                   subscriptionCadence={bank.subscriptionCadence}
                   subscriptionWeekdays={bank.subscriptionWeekdays}

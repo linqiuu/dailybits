@@ -17,6 +17,7 @@ interface KnowledgeBank {
   subscriberCount: number;
   creator: { id: string; name: string | null; image: string | null; uid?: string | null };
   _count: { points: number };
+  recommendedSubscriptionMode: "CURRENT_EDITION" | "FOLLOW_UPDATES";
   isSubscribed?: boolean;
 }
 
@@ -137,6 +138,7 @@ export function KnowledgeExplorer({
                   id={bank.id}
                   title={bank.title}
                   creator={bank.creator}
+                  recommendedSubscriptionMode={bank.recommendedSubscriptionMode}
                   pointCount={bank._count.points}
                   subscriberCount={bank.subscriberCount}
                   isLoggedIn={data.isLoggedIn}

@@ -16,13 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SubscriptionPolicyFields } from "./subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
 import { toast } from "sonner";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
@@ -51,6 +46,7 @@ export interface BankCardProps {
   subscriptionCadence: SubscriptionCadence;
   subscriptionWeekdays: number[];
   subscriptionPushTimes: string[];
+  recommendedSubscriptionMode?: LearningSubscriptionMode;
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
   subscriptionCount?: number;
@@ -72,6 +68,7 @@ export function BankCard({
   subscriptionCadence,
   subscriptionWeekdays,
   subscriptionPushTimes,
+  recommendedSubscriptionMode = "CURRENT_EDITION",
   isLoggedIn = false,
   isSubscribed = false,
   subscriptionCount = 0,
@@ -87,7 +84,8 @@ export function BankCard({
   const [endCondition, setEndCondition] = useState<"END_AFTER_COMPLETE" | "REPEAT_N_TIMES">(
     "END_AFTER_COMPLETE"
   );
-  const [repeatCount, setRepeatCount] = useState(1);
+  const [repeatCount, setRepeatCount] = useState(0);
+  const [mode, setMode] = useState(recommendedSubscriptionMode);
 
   const atSubLimit = subscriptionCount >= MAX_SUBSCRIPTIONS_PER_TARGET;
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
@@ -129,6 +127,7 @@ export function BankCard({
         body: JSON.stringify({
           bankId: id,
           ...(!fixedSchedule ? { pushTimes } : {}),
+          mode,
           endCondition,
           repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
         }),
@@ -219,10 +218,6 @@ export function BankCard({
                 <Badge variant="secondary" className="text-xs text-muted-foreground">
                   订阅数已满 {MAX_SUBSCRIPTIONS_PER_TARGET}/{MAX_SUBSCRIPTIONS_PER_TARGET}
                 </Badge>
-              ) : fixedSchedule ? (
-                <Button size="sm" onClick={handleSubscribe} disabled={loading}>
-                  {loading ? "订阅中..." : "订阅"}
-                </Button>
               ) : (
                 <Dialog open={open} onOpenChange={setOpen}>
                   <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
@@ -233,40 +228,9 @@ export function BankCard({
                       <DialogTitle>订阅「{title}」</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>结束条件</Label>
-                        <Select
-                          value={endCondition}
-                          onValueChange={(v) =>
-                            setEndCondition(v as "END_AFTER_COMPLETE" | "REPEAT_N_TIMES")
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue>
-                              {endCondition === "REPEAT_N_TIMES" ? "循环推送" : "推送完结束"}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="END_AFTER_COMPLETE">推送完结束</SelectItem>
-                            <SelectItem value="REPEAT_N_TIMES">循环推送</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {endCondition === "REPEAT_N_TIMES" && (
-                          <div className="space-y-1.5 pt-1">
-                            <Label htmlFor={`repeat-${id}`}>循环次数</Label>
-                            <Input
-                              id={`repeat-${id}`}
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={repeatCount}
-                              onChange={(e) =>
-                                setRepeatCount(Math.max(1, Number.parseInt(e.target.value, 10) || 1))
-                              }
-                            />
-                          </div>
-                        )}
-                      </div>
+                      <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount}
+                        onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={loading} />
+                      {!fixedSchedule && <>
                       <div className="space-y-2">
                         <Label>选择每日推送时间</Label>
                         <p className="text-xs text-muted-foreground">
@@ -315,6 +279,8 @@ export function BankCard({
                       {pushTimes.length === 0 && (
                         <p className="text-xs text-muted-foreground">点击「添加」设定推送时间，支持多个时间点</p>
                       )}
+                      </>}
+                      {fixedSchedule && <p className="text-sm text-muted-foreground">{scheduleSummary}</p>}
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>

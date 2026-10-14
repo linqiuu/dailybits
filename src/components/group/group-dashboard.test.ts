@@ -25,5 +25,6 @@ test("group knowledge subscriptions can be edited and cancelled from management"
   assert.match(source, /KnowledgeSubscriptionsTab/);
   assert.match(source, /handleUnsubscribeKnowledge/);
   assert.match(source, /headers: \{ "x-group-id": groupId \}/);
-  assert.match(source, /\/api\/knowledge-subscriptions\/\$\{sub\.id\}/);
+  assert.match(source, /<SubscriptionPanel[^>]*kind="KNOWLEDGE"/);
+  assert.match(source, /targetType="GROUP" targetId=\{groupId\}/);
 });

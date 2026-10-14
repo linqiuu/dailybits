@@ -30,6 +30,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { DepartmentSelector, type SelectedDepartment } from "@/components/bank/department-selector";
 
+import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
+
 type BankVisibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
 
 interface KnowledgePoint {
@@ -47,6 +50,7 @@ interface KnowledgeBank {
   visibleDepartments: string[];
   visibleDepartmentNames?: string[];
   generationPrompt: string | null;
+  recommendedSubscriptionMode: LearningSubscriptionMode;
   points: KnowledgePoint[];
 }
 
@@ -76,6 +80,7 @@ export default function EditKnowledgeBankPage({
   const { id: bankId } = React.use(params);
   const router = useRouter();
   const { data: session } = useSession();
+  const [recommendedMode, setRecommendedMode] = React.useState<LearningSubscriptionMode>("FOLLOW_UPDATES");
   const [bank, setBank] = React.useState<KnowledgeBank | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [activeTab, setActiveTab] = React.useState("manual");
@@ -111,6 +116,7 @@ export default function EditKnowledgeBankPage({
         return;
       }
       setBank(data);
+      setRecommendedMode(data.recommendedSubscriptionMode ?? "FOLLOW_UPDATES");
       setEditTitle(typeof data.title === "string" ? data.title : "");
       setPrompt(data.generationPrompt || DEFAULT_KNOWLEDGE_CARD_PROMPT);
       setEditVisibility(data.visibility ?? "PRIVATE");
@@ -187,6 +193,7 @@ export default function EditKnowledgeBankPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           visibility: editVisibility,
+          recommendedSubscriptionMode: recommendedMode,
           visibleDepartments:
             editVisibility === "PARTIAL" ? editDepartments.map(item => item.id) : [],
           visibleDepartmentNames: editVisibility === "PARTIAL" ? editDepartments.map(item => item.name) : [],
@@ -197,12 +204,13 @@ export default function EditKnowledgeBankPage({
         toast.error(data.error ?? "保存失败");
         return;
       }
-      toast.success("可见范围已更新");
+      toast.success("可见范围与推荐订阅模式已更新");
       setBank((prev) =>
         prev
           ? {
               ...prev,
               visibility: data.visibility ?? editVisibility,
+              recommendedSubscriptionMode: data.recommendedSubscriptionMode ?? recommendedMode,
               visibleDepartments: Array.isArray(data.visibleDepartments)
                 ? data.visibleDepartments
                 : editDepartments.map(item => item.id),
@@ -370,7 +378,7 @@ export default function EditKnowledgeBankPage({
       <div className="editor-hero flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-white">
+            <h1 className="text-2xl font-semibold text-foreground">
               {bank.title}
             </h1>
             <Badge variant="secondary">{bank.points.length} 条</Badge>
@@ -382,7 +390,7 @@ export default function EditKnowledgeBankPage({
         <Button
           variant="outline"
           size="sm"
-          className="border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+          className="border-border bg-card text-foreground hover:bg-muted"
           render={<Link href={`/knowledge/${bankId}`} />}
           nativeButton={false}
         >
@@ -752,10 +760,11 @@ export default function EditKnowledgeBankPage({
                       disabled={savingVisibility}
                       className="w-full sm:w-auto"
                     >
-                      {savingVisibility ? "保存中..." : "保存权限"}
+                      {savingVisibility ? "保存中..." : "保存设置"}
                     </Button>
                   </div>
 
+                  <div className="mt-4 max-w-sm"><SubscriptionPolicyFields label="推荐订阅模式" mode={recommendedMode} onModeChange={setRecommendedMode} disabled={savingVisibility} /></div>
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
                     <div className="space-y-2 sm:w-56">
                       <Label>可见范围</Label>

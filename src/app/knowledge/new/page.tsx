@@ -20,6 +20,9 @@ import { PageHeader, WorkbenchPanel } from "@/components/ui/workbench";
 
 import { DepartmentSelector, type SelectedDepartment } from "@/components/bank/department-selector";
 
+import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
+
 type Visibility = "PRIVATE" | "PUBLIC" | "PARTIAL";
 
 const VISIBILITY_LABELS: Record<Visibility, string> = {
@@ -38,6 +41,7 @@ export default function NewKnowledgeBankPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [recommendedMode, setRecommendedMode] = useState<LearningSubscriptionMode>("FOLLOW_UPDATES");
   const [visibility, setVisibility] = useState<Visibility>("PRIVATE");
   const [departments, setDepartments] = useState<SelectedDepartment[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -68,6 +72,7 @@ export default function NewKnowledgeBankPage() {
           title: title.trim(),
           description: description.trim() || undefined,
           visibility,
+          recommendedSubscriptionMode: recommendedMode,
           visibleDepartments:
             visibility === "PARTIAL" ? departments.map(item => item.id) : [],
           visibleDepartmentNames: visibility === "PARTIAL" ? departments.map(item => item.name) : [],
@@ -152,6 +157,7 @@ export default function NewKnowledgeBankPage() {
             </div>
           </section>
 
+          <SubscriptionPolicyFields label="推荐订阅模式" mode={recommendedMode} onModeChange={setRecommendedMode} disabled={submitting} />
           {visibility === "PARTIAL" ? (
             <section className="space-y-3 border-t border-border pt-5">
               <div className="flex items-center gap-2">

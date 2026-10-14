@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
           targetType:
             targetType === "GROUP" && targetIdParam ? "GROUP" : "USER",
           targetId: resolvedTargetId,
-          isActive: true,
+          status: { in: ["ACTIVE", "WAITING", "PAUSED"] },
         },
         select: { bankId: true },
       });
@@ -197,7 +197,7 @@ export async function GET(request: NextRequest) {
             targetType:
               targetType === "GROUP" && targetIdParam ? "GROUP" : "USER",
             targetId: resolvedTargetId,
-            isActive: true,
+            status: { in: ["ACTIVE", "WAITING", "PAUSED"] },
           },
         })
       : 0;

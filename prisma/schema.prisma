@@ -39,6 +39,19 @@ enum SubscriptionCadence {
   WEEKLY
 }
 
+enum LearningSubscriptionMode {
+  CURRENT_EDITION
+  FOLLOW_UPDATES
+}
+
+enum LearningSubscriptionStatus {
+  ACTIVE
+  WAITING
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
 model QuestionBank {
   id                       String                   @id @default(cuid())
   title                    String
@@ -52,6 +65,7 @@ model QuestionBank {
   subscriptionCadence      SubscriptionCadence      @default(DAILY)
   subscriptionWeekdays     Int[]                    @default([])
   subscriptionPushTimes    String[]                 @default(["09:30", "14:00"])
+  recommendedSubscriptionMode LearningSubscriptionMode @default(CURRENT_EDITION)
   isOfficial               Boolean                  @default(false)
   externalSource           String?
   externalSlug             String?
@@ -113,6 +127,7 @@ model KnowledgeBank {
   visibleDepartments String[]                @default([])
   visibleDepartmentNames String[]            @default([])
   generationPrompt   String?                 @db.Text
+  recommendedSubscriptionMode LearningSubscriptionMode @default(FOLLOW_UPDATES)
   externalSource     String?
   externalSlug       String?
   createdAt          DateTime                @default(now())
@@ -158,6 +173,11 @@ model Subscription {
   bankId       String
   pushTimes    String[]     @default(["09:30", "14:00", "17:00"])
   isActive     Boolean      @default(true)
+  mode         LearningSubscriptionMode @default(CURRENT_EDITION)
+  status       LearningSubscriptionStatus @default(ACTIVE)
+  editionQuestionIds String[] @default([])
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
   endCondition EndCondition @default(END_AFTER_COMPLETE)
   repeatCount  Int          @default(0)
   currentCycle Int          @default(0)
@@ -195,6 +215,12 @@ model KnowledgeSubscription {
   bankId       String
   pushTimes    String[]           @default(["09:30", "14:00", "17:00"])
   isActive     Boolean            @default(true)
+  mode         LearningSubscriptionMode @default(FOLLOW_UPDATES)
+  status       LearningSubscriptionStatus @default(ACTIVE)
+  editionPointIds String[]        @default([])
+  generation   Int               @default(0)
+  startedAt    DateTime          @default(now())
+  completedAt  DateTime?
   subscriberId String?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
@@ -255,6 +281,7 @@ model DeliveryJob {
   dedupeKey         String         @unique
   kind              DeliveryKind
   subscriptionId    String
+  subscriptionGeneration Int      @default(0)
   targetType        TargetType
   targetId          String
   scheduleDate      String
@@ -342,6 +369,7 @@ model DigestPushLog {
 model KnowledgePushLog {
   id               String                @id @default(cuid())
   subscriptionId   String
+  generation       Int                   @default(0)
   targetType       TargetType            @default(USER)
   targetId         String
   bankId           String

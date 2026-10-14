@@ -423,6 +423,7 @@ export default function EditBankPage({
     subscriptionCadence: "DAILY" | "WEEKLY";
     subscriptionWeekdays: number[];
     subscriptionPushTimes: string[];
+    recommendedSubscriptionMode: "CURRENT_EDITION" | "FOLLOW_UPDATES";
   } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [listRefreshKey, setListRefreshKey] = React.useState(0);
@@ -444,6 +445,7 @@ export default function EditBankPage({
         })),
       );
       setEditSchedule({
+        recommendedSubscriptionMode: bank.recommendedSubscriptionMode,
         subscriptionScheduleMode: bank.subscriptionScheduleMode,
         subscriptionCadence: bank.subscriptionCadence,
         subscriptionWeekdays: bank.subscriptionWeekdays,
@@ -518,6 +520,7 @@ export default function EditBankPage({
                 : editDepartments.map((item) => item.name),
               subscriptionScheduleMode:
                 data.subscriptionScheduleMode ?? editSchedule.subscriptionScheduleMode,
+              recommendedSubscriptionMode: data.recommendedSubscriptionMode ?? editSchedule.recommendedSubscriptionMode ?? "CURRENT_EDITION",
               subscriptionCadence:
                 data.subscriptionCadence ?? editSchedule.subscriptionCadence,
               subscriptionWeekdays: Array.isArray(data.subscriptionWeekdays)
@@ -551,12 +554,12 @@ export default function EditBankPage({
   return (
     <div className="page-enter space-y-6">
       <div className="editor-hero flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold text-white">
+        <h1 className="text-2xl font-semibold text-foreground">
           {bank.title}
         </h1>
         <Link
           href={`/bank/${bankId}`}
-          className="text-sm font-medium text-white/85 hover:text-white hover:underline"
+          className="text-sm font-medium text-primary hover:underline"
         >
           返回题库
         </Link>

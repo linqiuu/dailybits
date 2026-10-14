@@ -22,6 +22,8 @@ import {
   MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
 } from "@/types";
+import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
 import { cn } from "@/lib/utils";
 
 export interface KnowledgeCardProps {
@@ -30,6 +32,7 @@ export interface KnowledgeCardProps {
   creator: { id: string; name: string | null; image: string | null; uid?: string | null };
   pointCount: number;
   subscriberCount: number;
+  recommendedSubscriptionMode?: LearningSubscriptionMode;
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
   subscriptionCount?: number;
@@ -46,6 +49,7 @@ export function KnowledgeCard({
   creator,
   pointCount,
   subscriberCount,
+  recommendedSubscriptionMode = "FOLLOW_UPDATES",
   isLoggedIn = false,
   isSubscribed = false,
   subscriptionCount = 0,
@@ -61,6 +65,7 @@ export function KnowledgeCard({
   const [pushTimes, setPushTimes] = useState<string[]>([
     ...DEFAULT_KNOWLEDGE_PUSH_TIMES,
   ]);
+  const [mode, setMode] = useState(recommendedSubscriptionMode);
   const [newTime, setNewTime] = useState(DEFAULT_KNOWLEDGE_PUSH_TIMES[0]);
   const [loading, setLoading] = useState(false);
 
@@ -88,7 +93,7 @@ export function KnowledgeCard({
       const res = await fetch("/api/knowledge-subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankId: id, pushTimes, targetType, targetId }),
+        body: JSON.stringify({ bankId: id, pushTimes, targetType, targetId, mode }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -175,6 +180,7 @@ export function KnowledgeCard({
                       <DialogTitle>订阅「{title}」</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
+                      <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={loading} />
                       <div className="space-y-2">
                         <Label>每日推送时间</Label>
                         <p className="text-xs text-muted-foreground">

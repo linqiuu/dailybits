@@ -13,7 +13,7 @@ test("PostgreSQL delivery, identity and answer recovery", { skip: !process.env.T
   const user = await db.user.create({ data: { id: `test-${suffix}`, uid: `uid-${suffix}` } });
   const bank = await db.questionBank.create({ data: { title: "Delivery fixture", creatorId: user.id, visibility: "PUBLIC" } });
   const question = await db.question.create({ data: { bankId: bank.id, content: "Fixture question", options: ["A", "B", "C", "D"], correctAnswer: "A", explanation: "Fixture", status: "PUBLISHED" } });
-  const sub = await db.subscription.create({ data: { targetType: "USER", targetId: user.id, subscriberId: user.id, bankId: bank.id, pushTimes: ["09:30"], createdAt: new Date("2026-10-12T00:00:00Z") } });
+  const sub = await db.subscription.create({ data: { targetType: "USER", targetId: user.id, subscriberId: user.id, bankId: bank.id, editionQuestionIds: [question.id], pushTimes: ["09:30"], startedAt: new Date("2026-10-12T00:00:00Z"), createdAt: new Date("2026-10-12T00:00:00Z") } });
   try {
     await suite.test("missed minutes are caught up once, weekends are excluded", async () => {
       await db.schedulerState.upsert({ where: { id: "main" }, create: { id: "main", lastTickAt: new Date("2026-10-13T01:29:00Z") }, update: { lastTickAt: new Date("2026-10-13T01:29:00Z") } });
@@ -60,7 +60,7 @@ test("PostgreSQL delivery, identity and answer recovery", { skip: !process.env.T
       await assert.rejects(recordAnswerEvent(db, {}), (error: unknown) => error instanceof AnswerEventError && error.status === 400);
     });
     await suite.test("identity migration updates user targets and leaves group IDs alone", async () => {
-      const group = await db.subscription.create({ data: { targetType: "GROUP", targetId: user.id, bankId: bank.id, isActive: false } });
+      const group = await db.subscription.create({ data: { targetType: "GROUP", targetId: user.id, bankId: bank.id, isActive: false, status: "CANCELLED" } });
       const newId = `auth-${suffix}`;
       await db.$transaction(async (tx) => {
         await migrateUserTargets(tx, user.id, newId);
@@ -71,7 +71,7 @@ test("PostgreSQL delivery, identity and answer recovery", { skip: !process.env.T
       assert.equal((await db.questionBank.findUniqueOrThrow({ where: { id: bank.id } })).creatorId, newId);
       assert.equal(await db.pushLog.count({ where: { targetId: user.id, targetType: "USER" } }), 0);
       assert.equal(await db.questionAnswerEvent.count({ where: { respondentId: newId } }), 1);
-      await db.subscription.update({ where: { id: sub.id }, data: { isActive: false } });
+      await db.subscription.update({ where: { id: sub.id }, data: { isActive: false, status: "CANCELLED" } });
     });
   } finally { await db.$disconnect(); }
 });

@@ -2,6 +2,8 @@ export type TargetType = "USER" | "GROUP";
 export type DigestType = "GITHUB_TRENDING" | "AI_NEWS" | "ARXIV_AI_PAPERS";
 export type SubscriptionScheduleMode = "CUSTOM" | "FIXED";
 export type SubscriptionCadence = "DAILY" | "WEEKLY";
+export type LearningSubscriptionMode = "CURRENT_EDITION" | "FOLLOW_UPDATES";
+export type LearningSubscriptionStatus = "ACTIVE" | "WAITING" | "COMPLETED" | "PAUSED" | "CANCELLED";
 
 export const MAX_SUBSCRIPTIONS_PER_TARGET = 5;
 export const MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET = 3;

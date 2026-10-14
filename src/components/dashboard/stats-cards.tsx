@@ -63,7 +63,8 @@ export function StatsCards() {
       <MetricLine
         icon={Send}
         label="今日推送"
-        value={`${s.todayPushed} / ${s.todayTotal}`}
+        value={s.todayPushed}
+        detail={`当前配置 ${s.todayTotal} 个今日时段`}
         tone="accent"
       />
       <MetricLine

@@ -8,11 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { learningModeLabels, learningStatusLabels } from "@/lib/subscriptions/policy";
+import type { LearningSubscriptionMode, LearningSubscriptionStatus } from "@/types";
 import { RequestState } from "@/components/ui/request-state";
 
 interface SubscriptionItem {
   id: string;
   bankId: string;
+  mode: LearningSubscriptionMode;
+  status: LearningSubscriptionStatus;
   pushTimes: string[];
   effectivePushTimes?: string[];
   isActive: boolean;
@@ -137,6 +141,7 @@ export function SubscriptionList() {
                     {sub.bank.title}
                   </CardTitle>
                   <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline">{learningStatusLabels[sub.status]}</Badge><Badge variant="outline">{learningModeLabels[sub.mode]}</Badge>
                     {displayTimes.map((t) => (
                       <Badge key={t} variant="secondary">
                         {t}
@@ -163,13 +168,13 @@ export function SubscriptionList() {
                     render={<Link href={`/bank/${sub.bankId}`} />}
                     nativeButton={false}
                   >
-                    管理订阅
+                    {sub.status === "COMPLETED" ? "查看详情" : "管理订阅"}
                   </Button>
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={() => unsubscribe(sub)}
-                    disabled={cancellingId === sub.id}
+                    disabled={cancellingId === sub.id || sub.status === "COMPLETED"}
                   >
                     <Trash2 className="size-3.5" />
                     取消订阅

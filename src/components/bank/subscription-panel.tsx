@@ -1,11 +1,12 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Clock, Trash2 } from "lucide-react";
+import { CalendarClock, Clock, Pause, Play, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -14,266 +15,234 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SubscriptionPolicyFields } from "./subscription-policy-fields";
 import {
   formatSubscriptionSchedule,
   isValidPushTime,
 } from "@/lib/subscriptions/schedule";
 import {
+  learningModeLabels,
+  learningStatusLabels,
+} from "@/lib/subscriptions/policy";
+import {
   DEFAULT_PUSH_TIMES,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
+  type LearningSubscriptionMode,
+  type LearningSubscriptionStatus,
   type SubscriptionCadence,
   type SubscriptionScheduleMode,
 } from "@/types";
 
-type EndCondition = "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
-
-interface SubscriptionPanelProps {
+export interface SubscriptionSummary {
+  id: string;
+  pushTimes: string[];
+  isActive: boolean;
+  mode: LearningSubscriptionMode;
+  status: LearningSubscriptionStatus;
+  endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
+  repeatCount?: number;
+  currentCycle?: number;
+}
+interface Props {
   bankId: string;
+  kind?: "QUESTION" | "KNOWLEDGE";
+  targetType?: "USER" | "GROUP";
+  targetId?: string;
+  onChanged?: () => void;
+  framed?: boolean;
+  recommendedMode?: LearningSubscriptionMode;
   bankSchedule: {
     subscriptionScheduleMode: SubscriptionScheduleMode;
     subscriptionCadence: SubscriptionCadence;
     subscriptionWeekdays: number[];
     subscriptionPushTimes: string[];
   };
-  initialSubscription?: {
-    id: string;
-    pushTimes: string[];
-    isActive: boolean;
-    endCondition: EndCondition;
-    repeatCount: number;
-  } | null;
-  totalQuestions: number;
-  pushedCount: number;
+  initialSubscription?: SubscriptionSummary | null;
+  totalQuestions?: number;
+  pushedCount?: number;
 }
-
-function sortedTimes(times: string[]): string[] {
-  return [...new Set(times)].sort();
-}
-
 export function SubscriptionPanel({
   bankId,
+  kind = "QUESTION",
+  targetType = "USER",
+  targetId,
+  onChanged,
+  framed = true,
+  recommendedMode = "CURRENT_EDITION",
   bankSchedule,
-  initialSubscription,
-  totalQuestions,
-  pushedCount,
-}: SubscriptionPanelProps) {
+  initialSubscription = null,
+  totalQuestions = 0,
+  pushedCount = 0,
+}: Props) {
   const router = useRouter();
-  const [subscription, setSubscription] = useState(initialSubscription ?? null);
-  const [pushTimes, setPushTimes] = useState<string[]>(
-    initialSubscription?.pushTimes?.length ? initialSubscription.pushTimes : [...DEFAULT_PUSH_TIMES],
+  const [subscription, setSubscription] = useState(initialSubscription);
+  const [pushTimes, setPushTimes] = useState(
+    initialSubscription?.pushTimes ?? [...DEFAULT_PUSH_TIMES],
   );
-  const [endCondition, setEndCondition] = useState<EndCondition>(
+  const [mode, setMode] = useState(
+    initialSubscription?.mode ?? recommendedMode,
+  );
+  const [endCondition, setEndCondition] = useState(
     initialSubscription?.endCondition ?? "END_AFTER_COMPLETE",
   );
   const [repeatCount, setRepeatCount] = useState(
-    Math.max(1, initialSubscription?.repeatCount ?? 1),
+    initialSubscription?.repeatCount ?? 0,
   );
   const [newTime, setNewTime] = useState("09:30");
   const [loading, setLoading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-
-  const fixedSchedule = bankSchedule.subscriptionScheduleMode === "FIXED";
-  const effectiveTimes = fixedSchedule
+  const fixed = bankSchedule.subscriptionScheduleMode === "FIXED";
+  const effectiveTimes = fixed
     ? bankSchedule.subscriptionPushTimes
-    : subscription?.pushTimes?.length
-      ? subscription.pushTimes
-      : pushTimes;
-  const scheduleSummary = fixedSchedule
-    ? formatSubscriptionSchedule(bankSchedule)
-    : "订阅者自定义推送时间";
-  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
-
+    : (subscription?.pushTimes ?? pushTimes);
+  const current =
+    subscription &&
+    subscription.status !== "COMPLETED" &&
+    subscription.status !== "CANCELLED";
+  const api =
+    kind === "QUESTION"
+      ? targetType === "GROUP"
+        ? `/api/group/${targetId}/subscriptions`
+        : "/api/subscriptions"
+      : "/api/knowledge-subscriptions";
+  const unit = kind === "QUESTION" ? "题" : "条";
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSubscription(initialSubscription ?? null);
-      if (initialSubscription) {
-        setPushTimes(initialSubscription.pushTimes);
-        setEndCondition(initialSubscription.endCondition);
-        setRepeatCount(Math.max(1, initialSubscription.repeatCount || 1));
-      } else {
-        setPushTimes([...DEFAULT_PUSH_TIMES]);
-        setEndCondition("END_AFTER_COMPLETE");
-        setRepeatCount(1);
-      }
+    const timer = setTimeout(() => {
+      setSubscription(initialSubscription);
+      setPushTimes(initialSubscription?.pushTimes ?? [...DEFAULT_PUSH_TIMES]);
+      setMode(initialSubscription?.mode ?? recommendedMode);
+      setEndCondition(
+        initialSubscription?.endCondition ?? "END_AFTER_COMPLETE",
+      );
+      setRepeatCount(initialSubscription?.repeatCount ?? 0);
     }, 0);
-    return () => window.clearTimeout(timer);
-  }, [initialSubscription]);
-
-  useEffect(() => {
-    if (!editOpen || !subscription) return;
-    const timer = window.setTimeout(() => {
+    return () => clearTimeout(timer);
+  }, [initialSubscription, recommendedMode]);
+  function openEditor(open: boolean) {
+    if (open && subscription) {
       setPushTimes(subscription.pushTimes);
-      setEndCondition(subscription.endCondition);
-      setRepeatCount(Math.max(1, subscription.repeatCount || 1));
-      setNewTime("09:30");
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [editOpen, subscription]);
-
-  const addTime = () => {
-    const val = newTime.trim();
-    if (!isValidPushTime(val)) {
-      toast.error("请输入有效的 HH:MM 格式时间");
-      return;
+      setMode(subscription.mode);
+      setEndCondition(subscription.endCondition ?? "END_AFTER_COMPLETE");
+      setRepeatCount(subscription.repeatCount ?? 0);
     }
-    if (pushTimes.includes(val)) {
-      toast.error("该时间已存在");
-      return;
-    }
-    if (atTimeLimit) {
-      toast.error(`推送时间不能超过 ${MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个`);
-      return;
-    }
-    setPushTimes((prev) => sortedTimes([...prev, val]));
-    setNewTime("");
-  };
-
-  const removeTime = (time: string) => {
-    setPushTimes((prev) => prev.filter((item) => item !== time));
-  };
-
-  const subscriptionPayload = (includeTimes: boolean) => ({
-    bankId,
-    ...(includeTimes ? { pushTimes } : {}),
-    endCondition,
-    repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
-  });
-
-  const validateEndCondition = () => {
-    if (endCondition === "REPEAT_N_TIMES" && (!Number.isFinite(repeatCount) || repeatCount < 1)) {
-      toast.error("循环次数须为大于 0 的整数");
-      return false;
-    }
-    return true;
-  };
-
-  const handleSubscribe = async () => {
-    if (!fixedSchedule && pushTimes.length === 0) {
-      toast.error("请至少添加一个推送时间");
-      return;
-    }
-    if (!validateEndCondition()) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscriptionPayload(!fixedSchedule)),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "订阅失败");
-        return;
-      }
-      toast.success("订阅成功");
-      setSubscription({
-        id: data.id,
-        pushTimes: data.pushTimes ?? effectiveTimes,
-        isActive: true,
-        endCondition: data.endCondition ?? endCondition,
-        repeatCount: data.repeatCount ?? 0,
-      });
-      router.refresh();
-    } catch {
-      toast.error("订阅失败，请稍后重试");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdate = async () => {
-    if (!fixedSchedule && pushTimes.length === 0) {
+    setEditOpen(open);
+  }
+  async function save(editing: boolean) {
+    if (!fixed && !pushTimes.length) {
       toast.error("请至少保留一个推送时间");
       return;
     }
-    if (!validateEndCondition()) return;
-    if (!subscription) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/subscriptions/${subscription.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...(!fixedSchedule ? { pushTimes } : {}),
-          endCondition,
-          repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "更新失败");
-        return;
-      }
-      toast.success("已更新");
-      setSubscription((prev) =>
-        prev
-          ? {
-              ...prev,
-              pushTimes: data.pushTimes ?? prev.pushTimes,
-              endCondition: data.endCondition ?? prev.endCondition,
-              repeatCount: data.repeatCount ?? prev.repeatCount,
-            }
-          : prev,
+      const response = await fetch(
+        editing ? api + "/" + subscription!.id : api,
+        {
+          method: editing ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...(!editing ? { bankId, targetType, targetId } : {}),
+            mode,
+            ...(!fixed ? { pushTimes } : {}),
+            ...(kind === "QUESTION" ? { endCondition, repeatCount } : {}),
+          }),
+        },
       );
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "订阅保存失败");
+      setSubscription(body);
       setEditOpen(false);
+      toast.success(editing ? "订阅设置已更新" : "订阅成功");
+      onChanged?.();
       router.refresh();
-    } catch {
-      toast.error("更新失败，请稍后重试");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "保存失败，请稍后重试",
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleUnsubscribe = async () => {
+  }
+  async function changeState(action: "pause" | "resume" | "cancel") {
     if (!subscription) return;
-    if (!confirm("确定要取消订阅吗？")) return;
+    if (
+      action === "cancel" &&
+      !confirm("确定取消订阅吗？取消后题库更新不会恢复推送。")
+    )
+      return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/subscriptions/${subscription.id}`, {
-        method: "DELETE",
+      const response = await fetch(api + "/" + subscription.id, {
+        method: action === "cancel" ? "DELETE" : "PATCH",
+        headers: { "Content-Type": "application/json" },
+        ...(action !== "cancel" ? { body: JSON.stringify({ action }) } : {}),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "取消订阅失败");
-        return;
-      }
-      toast.success("已取消订阅");
-      setSubscription(null);
-      setPushTimes([...DEFAULT_PUSH_TIMES]);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "订阅更新失败");
+      setSubscription(
+        action === "cancel"
+          ? { ...subscription, status: "CANCELLED", isActive: false }
+          : body,
+      );
+      toast.success(
+        action === "cancel"
+          ? "已取消订阅"
+          : action === "pause"
+            ? "已暂停推送"
+            : "已继续订阅",
+      );
+      onChanged?.();
       router.refresh();
-    } catch {
-      toast.error("取消订阅失败，请稍后重试");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "操作失败，请稍后重试",
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  const timeEditor = (
+  }
+  const policy = (
+    <SubscriptionPolicyFields
+      mode={mode}
+      onModeChange={setMode}
+      endCondition={endCondition}
+      repeatCount={repeatCount}
+      onReviewChange={
+        kind === "QUESTION"
+          ? (end, count) => {
+              setEndCondition(end);
+              setRepeatCount(count);
+            }
+          : undefined
+      }
+      modeDisabled={!!current}
+      disabled={loading}
+    />
+  );
+  const times = (
     <div className="space-y-2">
-      <Label>推送时间</Label>
+      <Label htmlFor={"time-" + bankId}>推送时间</Label>
       <div className="flex gap-2">
         <Input
+          id={"time-" + bankId}
           type="time"
-          aria-label="新增题库推送时间"
           value={newTime}
+          disabled={loading}
           onChange={(event) => setNewTime(event.target.value)}
-          className="h-9 flex-1"
+          className="flex-1"
         />
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          onClick={addTime}
-          disabled={atTimeLimit}
+          disabled={
+            loading ||
+            pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION ||
+            !isValidPushTime(newTime)
+          }
+          onClick={() => {
+            setPushTimes([...new Set([...pushTimes, newTime])].sort());
+            setNewTime("");
+          }}
         >
           添加
         </Button>
@@ -282,127 +251,137 @@ export function SubscriptionPanel({
         {pushTimes.map((time) => (
           <Badge
             key={time}
-            render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
             variant="secondary"
-            className="h-7 cursor-pointer rounded-md font-normal"
-            onClick={() => removeTime(time)}
+            render={
+              <button
+                type="button"
+                disabled={loading}
+                aria-label={"移除 " + time + " 推送时间"}
+              />
+            }
+            onClick={() =>
+              setPushTimes(pushTimes.filter((item) => item !== time))
+            }
           >
             <Clock className="size-3" />
-            {time} x
+            {time}
+            <X className="size-3" />
           </Badge>
         ))}
       </div>
     </div>
   );
-
-  const endConditionEditor = (
-    <div className="space-y-2">
-      <Label>结束条件</Label>
-      <Select
-        value={endCondition}
-        onValueChange={(value) => setEndCondition(value as EndCondition)}
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue>
-            {endCondition === "REPEAT_N_TIMES" ? "循环推送" : "推送完结束"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="END_AFTER_COMPLETE">推送完结束</SelectItem>
-          <SelectItem value="REPEAT_N_TIMES">循环推送</SelectItem>
-        </SelectContent>
-      </Select>
-      {endCondition === "REPEAT_N_TIMES" ? (
-        <div className="space-y-1.5 pt-1">
-          <Label htmlFor="sub-repeat-count">循环次数</Label>
-          <Input
-            id="sub-repeat-count"
-            type="number"
-            min={1}
-            step={1}
-            value={repeatCount}
-            onChange={(event) =>
-              setRepeatCount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))
-            }
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-
   return (
-    <div className="rounded-lg border border-primary/20 bg-card p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
-          <div className="flex items-center gap-2">
+    <aside className={framed ? "rounded-lg border bg-card p-4" : "space-y-3"}>
+      {framed && (
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
             <CalendarClock className="size-4 text-primary" />
-            <h2 className="text-base font-semibold">订阅策略</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">{scheduleSummary}</p>
-          <div className="flex flex-wrap gap-2">
-            {effectiveTimes.map((time) => (
-              <Badge key={time} variant="secondary" className="rounded-md">
-                <Clock className="size-3" />
-                {time}
-              </Badge>
-            ))}
-          </div>
+            订阅设置
+          </h2>
+          {subscription && (
+            <Badge variant="outline">
+              {learningStatusLabels[subscription.status]}
+            </Badge>
+          )}
         </div>
-        {subscription ? (
-          <Badge className="shrink-0 bg-success/10 text-success">已订阅</Badge>
-        ) : null}
+      )}
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {fixed ? formatSubscriptionSchedule(bankSchedule) : "自定义推送时间"}
+        </p>
+        {!framed && subscription && (
+          <Badge variant="outline">
+            {learningStatusLabels[subscription.status]}
+          </Badge>
+        )}
       </div>
-
-      <div className="mt-4 space-y-3 border-t border-border pt-4">
-        {subscription ? (
+      {current && !fixed && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {effectiveTimes.map((time) => (
+            <Badge key={time} variant="secondary">
+              <Clock className="size-3" />
+              {time}
+            </Badge>
+          ))}
+        </div>
+      )}
+      <div className={framed ? "mt-4 space-y-3 border-t pt-4" : "space-y-3"}>
+        {current ? (
           <>
-            <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-              <div className="rounded-md bg-muted/50 px-3 py-2">
-                进度 {pushedCount} / {totalQuestions} 题
-              </div>
-              <div className="rounded-md bg-muted/50 px-3 py-2">
-                {subscription.endCondition === "REPEAT_N_TIMES"
-                  ? `循环推送 ${subscription.repeatCount} 次`
-                  : "推送完结束"}
-              </div>
+            <div className="flex flex-wrap justify-between gap-2 text-sm">
+              <span>{learningModeLabels[subscription.mode]}</span>
+              <span className="tabular-nums text-muted-foreground">
+                {pushedCount} / {totalQuestions} {unit}
+              </span>
             </div>
+            {kind === "QUESTION" &&
+              subscription.endCondition === "REPEAT_N_TIMES" && (
+                <p className="text-xs text-muted-foreground">
+                  第 {(subscription.currentCycle ?? 0) + 1} /{" "}
+                  {subscription.repeatCount} 轮
+                </p>
+              )}
             <div className="flex flex-wrap gap-2">
-              <Dialog open={editOpen} onOpenChange={setEditOpen}>
-                <DialogTrigger className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-muted">
-                  编辑订阅
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>编辑订阅</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    {endConditionEditor}
-                    {!fixedSchedule ? timeEditor : null}
-                    {fixedSchedule ? (
-                      <div className="rounded-md bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
-                        推送时间由题库创建者统一设置。
-                      </div>
-                    ) : null}
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setEditOpen(false)}
-                      disabled={loading}
-                    >
-                      取消
-                    </Button>
-                    <Button onClick={handleUpdate} disabled={loading}>
-                      保存
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              {(!fixed ||
+                (kind === "QUESTION" &&
+                  subscription.mode === "CURRENT_EDITION")) && (
+                <Dialog open={editOpen} onOpenChange={openEditor}>
+                  <DialogTrigger
+                    render={
+                      <Button variant="outline" size="sm" disabled={loading} />
+                    }
+                  >
+                    编辑设置
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>编辑订阅设置</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      {policy}
+                      {!fixed && times}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditOpen(false)}
+                        disabled={loading}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        onClick={() => void save(true)}
+                        disabled={loading}
+                      >
+                        保存
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
-                onClick={handleUnsubscribe}
                 disabled={loading}
+                onClick={() =>
+                  void changeState(
+                    subscription.status === "PAUSED" ? "resume" : "pause",
+                  )
+                }
+              >
+                {subscription.status === "PAUSED" ? (
+                  <Play className="size-3.5" />
+                ) : (
+                  <Pause className="size-3.5" />
+                )}
+                {subscription.status === "PAUSED" ? "继续推送" : "暂停"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={loading}
+                onClick={() => void changeState("cancel")}
               >
                 <Trash2 className="size-3.5" />
                 取消订阅
@@ -411,14 +390,19 @@ export function SubscriptionPanel({
           </>
         ) : (
           <>
-            {!fixedSchedule ? timeEditor : null}
-            {endConditionEditor}
-            <Button onClick={handleSubscribe} disabled={loading}>
-              {loading ? "订阅中..." : "订阅题库"}
+            {subscription?.status === "COMPLETED" && (
+              <p className="text-sm text-muted-foreground">
+                本期已推送完成，新增内容不会自动续订。
+              </p>
+            )}
+            {policy}
+            {!fixed && times}
+            <Button disabled={loading} onClick={() => void save(false)}>
+              {loading ? "保存中..." : subscription ? "重新订阅" : "确认订阅"}
             </Button>
           </>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { canAccessBank, getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BankDetailClient } from "./bank-detail-client";
-import { SubscriptionPanel } from "@/components/bank/subscription-panel";
+import { SubscriptionPanel, type SubscriptionSummary } from "@/components/bank/subscription-panel";
+import { questionProgress } from "@/lib/subscriptions/lifecycle";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -34,17 +35,12 @@ export default async function BankDetailPage({ params }: PageProps) {
   const isCreator = session?.user?.id === bank.creatorId;
   const canViewAnswers = isCreator || session?.user.isAdmin === true;
 
-  let initialSubscription: {
-    id: string;
-    pushTimes: string[];
-    isActive: boolean;
-    endCondition: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
-    repeatCount: number;
-  } | null = null;
+  let initialSubscription: SubscriptionSummary | null = null;
   let pushedCount = 0;
+  let totalQuestions = bank.questions.filter(question => question.status === "PUBLISHED").length;
 
   if (session?.user?.id) {
-    const [sub, pushed] = await Promise.all([
+    const sub = await
       prisma.subscription.findUnique({
         where: {
           targetType_targetId_bankId: {
@@ -53,34 +49,13 @@ export default async function BankDetailPage({ params }: PageProps) {
             bankId: id,
           },
         },
-        select: {
-          id: true,
-          pushTimes: true,
-          isActive: true,
-          endCondition: true,
-          repeatCount: true,
-        },
-      }),
-      prisma.pushLog.findMany({
-        where: {
-          targetType: "USER",
-          targetId: session.user.id,
-          question: { bankId: id },
-        },
-        select: { questionId: true },
-        distinct: ["questionId"],
-      }),
-    ]);
-    if (sub?.isActive) {
-      initialSubscription = {
-        id: sub.id,
-        pushTimes: sub.pushTimes,
-        isActive: sub.isActive,
-        endCondition: sub.endCondition,
-        repeatCount: sub.repeatCount,
-      };
+      });
+    if (sub) {
+      initialSubscription = sub;
+      const progress = await questionProgress(prisma, sub);
+      pushedCount = progress.pushedCount;
+      totalQuestions = progress.questionCount;
     }
-    pushedCount = pushed.length;
   }
 
   return (
@@ -106,6 +81,7 @@ export default async function BankDetailPage({ params }: PageProps) {
           session?.user?.id ? (
             <SubscriptionPanel
               bankId={bank.id}
+              recommendedMode={bank.recommendedSubscriptionMode}
               bankSchedule={{
                 subscriptionScheduleMode: bank.subscriptionScheduleMode,
                 subscriptionCadence: bank.subscriptionCadence,
@@ -113,7 +89,7 @@ export default async function BankDetailPage({ params }: PageProps) {
                 subscriptionPushTimes: bank.subscriptionPushTimes,
               }}
               initialSubscription={initialSubscription}
-              totalQuestions={bank._count.questions}
+              totalQuestions={totalQuestions}
               pushedCount={pushedCount}
             />
           ) : null

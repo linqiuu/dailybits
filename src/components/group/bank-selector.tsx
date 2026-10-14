@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
+import type { LearningSubscriptionMode } from "@/types";
 import { CalendarClock, Search } from "lucide-react";
 import { formatSubscriptionSchedule } from "@/lib/subscriptions/schedule";
 import {
@@ -17,6 +19,7 @@ interface Bank {
   id: string;
   title: string;
   subscriberCount: number;
+  recommendedSubscriptionMode: LearningSubscriptionMode;
   subscriptionScheduleMode: "CUSTOM" | "FIXED";
   subscriptionCadence: "DAILY" | "WEEKLY";
   subscriptionWeekdays: number[];
@@ -39,6 +42,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
 
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
   const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
+  const [mode, setMode] = useState<LearningSubscriptionMode>("CURRENT_EDITION");
   const [newTime, setNewTime] = useState("");
   const [subscribing, setSubscribing] = useState(false);
 
@@ -114,6 +118,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bankId: selectedBank.id,
+          mode,
           ...(!selectedUsesFixedSchedule ? { pushTimes } : {}),
         }),
       });
@@ -153,6 +158,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
           </div>
         </div>
 
+        <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={subscribing} />
         {!selectedUsesFixedSchedule && (
           <div className="space-y-2">
             <Label>推送时间</Label>
@@ -246,7 +252,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
             <button
               key={bank.id}
               className="flex w-full items-center justify-between rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => setSelectedBank(bank)}
+              onClick={() => { setSelectedBank(bank); setMode(bank.recommendedSubscriptionMode); }}
               disabled={bank.isSubscribed}
             >
               <div>

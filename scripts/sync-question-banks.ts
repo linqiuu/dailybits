@@ -372,6 +372,7 @@ function validateQuestion(item: unknown, label: string): RawQuestion {
   const explanation =
     typeof raw.explanation === "string" ? raw.explanation.trim() : "";
   const options = raw.options;
+  const identityKey = readStringField(raw, ["id", "slug", "key"]);
 
   if (!content) {
     throw new Error(`${label}: content is required`);
@@ -401,7 +402,7 @@ function validateQuestion(item: unknown, label: string): RawQuestion {
     options: JSON.parse(JSON.stringify(options)) as Prisma.InputJsonValue,
     correctAnswer,
     explanation,
-    identityHash: hashJson(normalizedIdentity),
+    identityHash: identityKey ? hashJson({ key: normalizeText(identityKey) }) : hashJson(normalizedIdentity),
     contentHash: hashJson(normalizedContent),
   };
 }
@@ -820,7 +821,7 @@ async function syncQuestionBankFile(
   }
 
   for (const question of parsed.questions) {
-    const matches = existingByIdentity.get(question.identityHash) ?? [];
+    const matches = (existingByIdentity.get(question.identityHash) ?? existingByIdentity.get(questionIdentityHash(question.content, question.correctAnswer)) ?? []).filter(match => !keptQuestionIds.includes(match.id));
     const externalMatches = matches.filter(
       (match) => match.externalIdentityHash === question.identityHash,
     );
@@ -878,13 +879,6 @@ async function syncQuestionBankFile(
     updated++;
   }
 
-  const reactivated =
-    created > 0
-      ? await tx.subscription.updateMany({
-          where: { bankId: bank.id, isActive: false },
-          data: { isActive: true, currentCycle: 0 },
-        })
-      : { count: 0 };
   const replaced = options.replace
     ? await tx.question.updateMany({
         where: {
@@ -905,7 +899,6 @@ async function syncQuestionBankFile(
     updated,
     skipped,
     replaced: replaced.count,
-    reactivated: reactivated.count,
   };
 }
 
@@ -946,7 +939,7 @@ async function syncKnowledgeBankFile(
   }
 
   for (const point of parsed.points) {
-    const matches = existingByIdentity.get(point.identityHash) ?? [];
+    const matches = (existingByIdentity.get(point.identityHash) ?? existingByIdentity.get(knowledgeIdentityHash(point.content)) ?? []).filter(match => !keptPointIds.includes(match.id));
     const externalMatches = matches.filter(
       (match) => match.externalIdentityHash === point.identityHash,
     );
@@ -1044,7 +1037,6 @@ function formatResult(file: LocalFile, result: Awaited<ReturnType<typeof syncQue
   if (result.kind === "question") {
     return (
       base.replace("removed by replace", "drafted by replace") +
-      `, ${result.reactivated} subscriptions reactivated` +
       `${result.adopted ? ", adopted existing bank" : ""}` +
       `${result.createdBank ? ", created bank" : ""}`
     );

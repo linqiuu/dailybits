@@ -8,11 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { learningModeLabels, learningStatusLabels } from "@/lib/subscriptions/policy";
+import type { LearningSubscriptionMode, LearningSubscriptionStatus } from "@/types";
 import { RequestState } from "@/components/ui/request-state";
 
 interface KnowledgeSubscriptionItem {
   id: string;
   bankId: string;
+  mode: LearningSubscriptionMode;
+  status: LearningSubscriptionStatus;
   pushTimes: string[];
   bank: { id: string; title: string };
   pointCount: number;
@@ -113,6 +117,7 @@ export function KnowledgeSubscriptionList() {
               <div className="space-y-2">
                 <CardTitle className="text-base font-semibold">{sub.bank.title}</CardTitle>
                 <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline">{learningStatusLabels[sub.status]}</Badge><Badge variant="outline">{learningModeLabels[sub.mode]}</Badge>
                   {sub.pushTimes.map((time) => (
                     <Badge key={time} variant="secondary">
                       {time}
@@ -120,7 +125,7 @@ export function KnowledgeSubscriptionList() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {sub.pushedCount} 次推送，{sub.pointCount} 张知识卡
+                  已推送 {sub.pushedCount} / {sub.pointCount} 张知识卡
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -130,13 +135,13 @@ export function KnowledgeSubscriptionList() {
                   render={<Link href={`/knowledge/${sub.bankId}`} />}
                   nativeButton={false}
                 >
-                  编辑时间
+                  管理订阅
                 </Button>
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => unsubscribe(sub)}
-                  disabled={cancellingId === sub.id}
+                  disabled={cancellingId === sub.id || sub.status === "COMPLETED"}
                 >
                   <Trash2 className="size-3.5" />
                   取消订阅
