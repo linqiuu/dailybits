@@ -27,17 +27,17 @@ import {
 
 const channels = [
   {
-    label: "答题练习",
+    label: "题库",
     value: "banks",
     icon: BookOpenCheck,
   },
   {
-    label: "知识卡片",
+    label: "知识卡",
     value: "knowledge",
     icon: Brain,
   },
   {
-    label: "资讯摘要",
+    label: "AI 资讯",
     value: "digests",
     icon: Newspaper,
   },
@@ -65,23 +65,34 @@ const creationLinks = [
 ];
 
 export default function Home() {
+  const today = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).format(new Date());
+
   return (
     <div className="home-index page-enter">
       <section className="home-frame">
         <div className="home-command">
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold leading-tight text-foreground">
-              发现
+            <h1 className="home-title">
+              今天学点什么？
             </h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              从团队共享的题库、知识卡与 AI 动态里，挑一份加入你的学习节奏。
+            </p>
           </div>
           <div className="home-actions">
+            <span className="home-date" aria-label={`今天是 ${today}`}>{today}</span>
             <Button
               className="home-secondary-action"
               variant="outline"
               render={<Link href="/dashboard" />}
               nativeButton={false}
             >
-              我的内容
+              我的学习
               <ArrowRight className="size-4" aria-hidden />
             </Button>
             <DropdownMenu>
@@ -113,7 +124,8 @@ export default function Home() {
         </div>
 
         <Tabs defaultValue="banks" className="home-workspace">
-          <TabsList className="home-channel-list">
+          <div className="home-channel-rail">
+            <TabsList className="home-channel-list">
             {channels.map((item) => {
               const Icon = item.icon;
               return (
@@ -129,7 +141,11 @@ export default function Home() {
                 </TabsTrigger>
               );
             })}
-          </TabsList>
+            </TabsList>
+            <span className="hidden text-xs font-medium text-muted-foreground lg:block">
+              选择内容，查看详情后订阅
+            </span>
+          </div>
 
           <div className="home-feed-panel">
             <TabsContent value="banks" className="home-panel">

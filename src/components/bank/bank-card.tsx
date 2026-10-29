@@ -31,6 +31,7 @@ import {
   isValidPushTime,
 } from "@/lib/subscriptions/schedule";
 import { cn } from "@/lib/utils";
+import { SignalBars } from "@/components/ui/signal-bars";
 
 export interface BankCardProps {
   id: string;
@@ -98,6 +99,15 @@ export function BankCard({
   });
   const accuracy =
     answerCount > 0 ? Math.round((correctAnswerCount / answerCount) * 1000) / 10 : null;
+  const signalValues = [
+    28 + (questionCount % 5) * 9,
+    42 + (subCount % 4) * 10,
+    32 + (answererCount % 6) * 8,
+    66,
+    48 + ((questionCount + subCount) % 5) * 8,
+    38,
+    accuracy ?? 54,
+  ];
 
   const addTime = () => {
     const val = newTime.trim();
@@ -152,12 +162,16 @@ export function BankCard({
     <Card
       size={compact ? "sm" : "default"}
       className={cn(
-        "content-card paper-rise card-hover flex flex-col",
-        compact ? "min-h-[156px]" : "min-h-[220px]",
+        "content-card paper-rise card-hover flex flex-col overflow-hidden",
+        compact ? "min-h-[214px]" : "min-h-[230px]",
       )}
       style={{ animationDelay: `${appearDelayMs}ms` }}
     >
       <CardHeader className={cn("min-w-0 pb-2", compact ? "gap-2" : "gap-3")}>
+        <div className="catalog-meta">
+          <span>QUESTION BANK</span>
+          <span>QB-{id.slice(-6).toUpperCase()}</span>
+        </div>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <Link href={`/bank/${id}`} className="block min-w-0 hover:underline">
@@ -183,10 +197,11 @@ export function BankCard({
           <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
             {description}
           </p>
-        ) : null}
+        ) : <p className="text-sm leading-6 text-muted-foreground">按你的节奏持续练习，记录每次答题表现。</p>}
       </CardHeader>
       <CardContent className={cn("flex flex-1 flex-col justify-between", compact ? "gap-3" : "gap-4")}>
         <div className="space-y-3">
+          <SignalBars values={signalValues} />
           <div className="content-metrics">
             <Stat label="题目" value={questionCount} />
             <Stat label="订阅" value={subCount} icon={Users} />

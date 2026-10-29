@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DailyBits - 学习推送",
-  description: "支持 AI 自动化解析、多时段精准推送的碎片化知识刷题平台",
+  title: "DailyBits - 每天学一点",
+  description: "发现、订阅并持续学习团队里的优质题库、知识卡片与 AI 资讯。",
 };
 
 export default function RootLayout({
@@ -19,16 +19,16 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="antialiased">
         <template
-          data-impeccable-direction="2138cb91"
+          data-impeccable-direction="d1f8fdbb"
           dangerouslySetInnerHTML={{
             __html:
-              "<!-- THESIS: DailyBits is a content discovery desk for scheduled learning, refusing the decorative SaaS hero and admin-console metric wall. OWN-WORLD: clear white work surfaces, ink active states, cobalt focus, compact tabs, real cards, and restrained environment light. STORY: users choose a content type, search, inspect real activity, subscribe, or create material without reading instructions. FIRST VIEWPORT: a short command bar sits above a horizontal channel switcher and live content stream. FORM: code-led impeccable refresh informed by open-source knowledge and newsletter products, preserving routes and behavior. FINISH: unreviewed and undocumented is unfinished; this build ends with screenshots, detector, validation, and DESIGN.md kept in sync. -->",
+              "<!-- THESIS: DailyBits is a living learning catalogue, not a SaaS dashboard. OWN-WORLD: independent editorial catalogues and record sleeves lend warm paper, black ink, signal lime, compact metadata and one rhythmic bar motif. STORY: choose a channel, scan dense real material, subscribe, create, and return to progress. FIRST VIEWPORT: a compact masthead and channel rail lead directly into the catalogue. FORM: standard product controls inside a distinctive publishing system. SEED: d1f8fdbb9c8b8eda. -->",
           }}
         />
         <Providers>
           <div className="app-stage flex min-h-screen flex-col">
             <Header />
-            <main className="mx-auto box-border w-full min-w-0 max-w-[1320px] flex-1 px-4 py-5 sm:px-6 lg:py-6">
+            <main className="mx-auto box-border w-full min-w-0 max-w-[1440px] flex-1 px-5 py-7 sm:px-7 lg:px-10 lg:py-9">
               {children}
             </main>
             <Footer />

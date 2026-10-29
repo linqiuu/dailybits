@@ -4,34 +4,34 @@
 
 ## Direction
 
-DailyBits is a user-facing learning website, not an operations console. The interface should feel like a polished daily discovery desk: users find useful material, subscribe to a rhythm, create their own banks, and check progress without reading documentation.
+DailyBits is a user-facing learning catalogue, not an operations console. It borrows the confidence and information density of independent record catalogues and editorial indexes: warm paper, black ink, compact identifiers, vivid signal colors and a rhythmic bar motif. Product controls remain familiar and predictable.
 
-The visual direction is compact, content-first learning. White surfaces, cobalt actions and teal accents provide clear hierarchy without glowing backgrounds. Navigation is a stable top bar, content sections are unframed, cards use 8px corners and inline metadata. Discovery starts with channel tabs and the real catalogue, not a decorative hero.
+The interface is desktop-first and content-first. The black masthead stays stable while the warm paper workspace carries discovery, creation and reporting. Signal lime marks the current route and primary moments; coral, blue and yellow distinguish content or status only when useful. Discovery starts with channel tabs and the real catalogue, never a decorative product pitch.
 
 ## Tokens
 
-- `--primary`, `--accent`: cobalt focus, primary actions, selected tabs, and keyboard rings.
-- `--surface-ink`, `--surface-night`: dark editor headers and high-contrast surfaces.
-- `--surface-mint`: success, creation, and calm learning accents.
-- `--surface-coral`, `--surface-citrine`: digest and warning accents used sparingly.
-- `--surface-sky`, `--surface-field`: luminous learning backgrounds and empty states.
+- `--primary`, `--surface-ink`, `--surface-night`: black ink, actions, navigation and editor headers.
+- `--accent`, `--surface-mint`: signal lime for active routes, creation and authored interaction moments.
+- `--surface-coral`, `--surface-citrine`, `--surface-sky`: content and status accents used sparingly.
+- `--surface-paper`, `--surface-field`: warm reading and editing surfaces.
 - `--radius`: shared radius for panels, cards, forms, and tab controls.
 
 ## Components
 
-- `Header`: stable top navigation with a recognizable brand and predictable actions.
-- `HomeFrame`: compact command bar plus horizontal channel switcher, with real content directly below.
+- `Header`: black masthead, signal mark, stable navigation and predictable identity actions.
+- `HomeFrame`: compact editorial statement plus horizontal channel switcher, with real content directly below.
 - `PageHeader`: unframed, concise heading and actions.
 - `WorkbenchPanel`: unframed content section; only repeated items and actual tools get cards.
 - `RequestState`, `AuthenticationState`: explicit loading, retry, login and permission states.
 - `MetricLine`: dashboard and admin summary cells.
-- `content-card`, `stream-toolbar`, `empty-slate`: shared classes for discovery cards, search bars, and empty states.
+- `content-card`, `catalog-meta`, `signal-bars`: dense catalogue entries with stable metadata and an activity signature.
+- `stream-toolbar`, `empty-slate`: shared search and recovery surfaces.
 
 Base controls continue to use the existing shadcn/Base UI stack. Icons use `lucide-react`. No paid service or external account is required.
 
 ## Motion
 
-Motion is restrained to page entry and control state transitions. Cards do not lift or resize on hover. Reduced motion is respected.
+One clipped, blur-to-sharp page reveal establishes the publishing surface. Cards never lift or resize; their signal bars change color on hover without shifting layout. Reduced motion is respected.
 
 ## Page Coverage
 

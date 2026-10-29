@@ -25,6 +25,7 @@ import {
 import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
 import type { LearningSubscriptionMode } from "@/types";
 import { cn } from "@/lib/utils";
+import { SignalBars } from "@/components/ui/signal-bars";
 
 export interface KnowledgeCardProps {
   id: string;
@@ -71,6 +72,7 @@ export function KnowledgeCard({
 
   const atSubLimit = subscriptionCount >= MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET;
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
+  const signalValues = [35, 52 + (pointCount % 4) * 9, 72, 44, 60 + (subCount % 3) * 10, 36, 58];
 
   const addTime = () => {
     const val = newTime.trim();
@@ -116,12 +118,16 @@ export function KnowledgeCard({
     <Card
       size={compact ? "sm" : "default"}
       className={cn(
-        "content-card paper-rise card-hover flex flex-col",
-        compact ? "min-h-[146px]" : "min-h-[200px]",
+        "content-card paper-rise card-hover flex flex-col overflow-hidden",
+        compact ? "min-h-[214px]" : "min-h-[220px]",
       )}
       style={{ animationDelay: `${appearDelayMs}ms` }}
     >
       <CardHeader className={cn("min-w-0 pb-2", compact ? "gap-2" : "gap-3")}>
+        <div className="catalog-meta">
+          <span>KNOWLEDGE DECK</span>
+          <span>KD-{id.slice(-6).toUpperCase()}</span>
+        </div>
         <Link href={`/knowledge/${id}`} className="block min-w-0 hover:underline">
           <CardTitle
             className={cn(
@@ -137,6 +143,7 @@ export function KnowledgeCard({
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-3">
         <div className="space-y-3">
+          <SignalBars values={signalValues} />
           <p className="text-sm text-muted-foreground">
             创建者：{creator.name ?? "未知"}
             {creator.uid ? ` (${creator.uid})` : ""}

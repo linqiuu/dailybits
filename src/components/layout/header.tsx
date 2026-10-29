@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  BookOpenCheck,
   Compass,
   Github,
   LayoutDashboard,
@@ -33,7 +32,7 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/", label: "发现", icon: Compass },
-  { href: "/dashboard", label: "我的", icon: LayoutDashboard },
+  { href: "/dashboard", label: "我的学习", icon: LayoutDashboard },
 ];
 
 function userInitial(name?: string | null, uid?: string | null): string {
@@ -51,17 +50,19 @@ export function Header() {
 
   return (
     <header className="nav-chrome sticky top-0 z-50">
-      <div className="nav-shell mx-auto flex h-20 w-full max-w-[1360px] min-w-0 items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="brand-card flex min-w-0 items-center gap-2.5">
-          <span className="brand-tile flex size-9 shrink-0 items-center justify-center rounded-md">
-            <BookOpenCheck className="size-4.5" aria-hidden />
+      <div className="nav-shell mx-auto flex w-full max-w-[1440px] min-w-0 items-center justify-between px-5 sm:px-7 lg:px-10">
+        <Link href="/" className="brand-card flex min-w-0 items-center gap-3">
+          <span className="brand-tile flex size-9 shrink-0 items-end justify-center gap-[3px] rounded-md pb-2" aria-hidden="true">
+            <span className="h-2.5 w-[3px] bg-current" />
+            <span className="h-4 w-[3px] bg-current" />
+            <span className="h-3 w-[3px] bg-current" />
           </span>
           <span className="min-w-0">
-            <span className="block text-base font-semibold leading-5 text-foreground">
+            <span className="block text-base font-bold leading-5 text-white">
               DailyBits
             </span>
-            <span className="block text-xs leading-4 text-muted-foreground">
-              学习推送
+            <span className="block text-[10px] font-medium uppercase leading-4 text-white/55">
+              Learning catalogue
             </span>
           </span>
         </Link>
@@ -91,7 +92,7 @@ export function Header() {
             href="https://github.com/linqiuu/dailybits"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+            className="inline-flex size-9 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/10 hover:text-white"
             aria-label="GitHub"
             title="GitHub"
           >
@@ -101,9 +102,9 @@ export function Header() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger>
-                <Avatar className="ml-2 size-9 cursor-pointer border border-border">
+                <Avatar className="ml-2 size-9 cursor-pointer border border-white/15">
                   <AvatarImage src={user.image || ""} alt={user.name || ""} />
-                  <AvatarFallback className="bg-secondary text-xs font-medium text-primary">
+                  <AvatarFallback className="bg-white/10 text-xs font-medium text-white">
                     {userInitial(user.name, user.uid)}
                   </AvatarFallback>
                 </Avatar>
@@ -137,7 +138,7 @@ export function Header() {
             <Button
               size="sm"
               variant="outline"
-              className="ml-2 bg-white/65"
+              className="ml-2 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
               onClick={startLogin}
             >
               <ShieldCheck className="size-3.5" aria-hidden />

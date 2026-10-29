@@ -17,11 +17,11 @@ export function PageHeader({
   return (
     <section className={cn("page-hero flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div className="min-w-0 space-y-2">
-        <h1 className="max-w-3xl text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
+        <h1 className="max-w-3xl text-3xl font-bold leading-tight text-foreground">
           {title}
         </h1>
         {description ? (
-          <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+          <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
             {description}
           </p>
         ) : null}
