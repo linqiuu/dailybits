@@ -58,11 +58,11 @@ export function Header() {
             <span className="h-3 w-[3px] bg-current" />
           </span>
           <span className="min-w-0">
-            <span className="block text-base font-bold leading-5 text-white">
+            <span className="block text-base font-bold leading-5 text-foreground">
               DailyBits
             </span>
-            <span className="block text-[10px] font-medium uppercase leading-4 text-white/55">
-              Learning catalogue
+            <span className="block text-[11px] font-medium leading-4 text-muted-foreground">
+              学习推送
             </span>
           </span>
         </Link>
@@ -92,7 +92,7 @@ export function Header() {
             href="https://github.com/linqiuu/dailybits"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex size-9 items-center justify-center rounded-md text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+            className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="GitHub"
             title="GitHub"
           >
@@ -102,9 +102,9 @@ export function Header() {
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger>
-                <Avatar className="ml-2 size-9 cursor-pointer border border-white/15">
+                <Avatar className="ml-2 size-9 cursor-pointer border border-border">
                   <AvatarImage src={user.image || ""} alt={user.name || ""} />
-                  <AvatarFallback className="bg-white/10 text-xs font-medium text-white">
+                  <AvatarFallback className="bg-secondary text-xs font-medium text-primary">
                     {userInitial(user.name, user.uid)}
                   </AvatarFallback>
                 </Avatar>
@@ -138,7 +138,7 @@ export function Header() {
             <Button
               size="sm"
               variant="outline"
-              className="ml-2 border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+              className="ml-2 bg-card"
               onClick={startLogin}
             >
               <ShieldCheck className="size-3.5" aria-hidden />

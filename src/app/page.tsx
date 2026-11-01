@@ -125,7 +125,7 @@ export default function Home() {
 
         <Tabs defaultValue="banks" className="home-workspace">
           <div className="home-channel-rail">
-            <TabsList className="home-channel-list">
+            <TabsList variant="line" className="home-channel-list">
             {channels.map((item) => {
               const Icon = item.icon;
               return (
@@ -142,9 +142,6 @@ export default function Home() {
               );
             })}
             </TabsList>
-            <span className="hidden text-xs font-medium text-muted-foreground lg:block">
-              选择内容，查看详情后订阅
-            </span>
           </div>
 
           <div className="home-feed-panel">

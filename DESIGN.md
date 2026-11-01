@@ -4,21 +4,21 @@
 
 ## Direction
 
-DailyBits is a user-facing learning catalogue, not an operations console. It borrows the confidence and information density of independent record catalogues and editorial indexes: warm paper, black ink, compact identifiers, vivid signal colors and a rhythmic bar motif. Product controls remain familiar and predictable.
+DailyBits is a user-facing learning catalogue, not an operations console. It uses the confidence and information density of editorial indexes without turning navigation into decoration: cool white surfaces, clear blue actions, compact metadata and a restrained activity-bar motif. Product controls remain familiar and predictable.
 
-The interface is desktop-first and content-first. The black masthead stays stable while the warm paper workspace carries discovery, creation and reporting. Signal lime marks the current route and primary moments; coral, blue and yellow distinguish content or status only when useful. Discovery starts with channel tabs and the real catalogue, never a decorative product pitch.
+The interface is desktop-first and content-first. A light masthead keeps the product calm while blue text, underlines and primary buttons mark navigation and action. Discovery starts with unboxed channel tabs and the real catalogue, never a decorative product pitch or a loud segmented control.
 
 ## Tokens
 
-- `--primary`, `--surface-ink`, `--surface-night`: black ink, actions, navigation and editor headers.
-- `--accent`, `--surface-mint`: signal lime for active routes, creation and authored interaction moments.
+- `--primary`, `--accent`: stable cobalt for actions, active routes and focus.
+- `--surface-ink`, `--surface-night`: dark ink reserved for editor and high-contrast content surfaces.
 - `--surface-coral`, `--surface-citrine`, `--surface-sky`: content and status accents used sparingly.
-- `--surface-paper`, `--surface-field`: warm reading and editing surfaces.
+- `--surface-paper`, `--surface-field`: cool white reading and editing surfaces.
 - `--radius`: shared radius for panels, cards, forms, and tab controls.
 
 ## Components
 
-- `Header`: black masthead, signal mark, stable navigation and predictable identity actions.
+- `Header`: light masthead, blue brand mark, text-led navigation and predictable identity actions.
 - `HomeFrame`: compact editorial statement plus horizontal channel switcher, with real content directly below.
 - `PageHeader`: unframed, concise heading and actions.
 - `WorkbenchPanel`: unframed content section; only repeated items and actual tools get cards.
