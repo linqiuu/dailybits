@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { BookMarked, Users } from "lucide-react";
+import { BookMarked, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LearningCatalogCard } from "@/components/ui/learning-catalog-card";
 import {
   Dialog,
   DialogContent,
@@ -24,29 +24,27 @@ import {
 } from "@/types";
 import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
 import type { LearningSubscriptionMode } from "@/types";
-import { cn } from "@/lib/utils";
-import { SignalBars } from "@/components/ui/signal-bars";
 
 export interface KnowledgeCardProps {
   id: string;
   title: string;
-  creator: { id: string; name: string | null; image: string | null; uid?: string | null };
+  description?: string | null;
+  creator: { id: string; name: string | null; image: string | null; uid?: string | null; };
   pointCount: number;
   subscriberCount: number;
   recommendedSubscriptionMode?: LearningSubscriptionMode;
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
   subscriptionCount?: number;
-  appearDelayMs?: number;
   targetType?: "USER" | "GROUP";
   targetId?: string;
   onSubscribed?: () => void;
-  compact?: boolean;
 }
 
 export function KnowledgeCard({
   id,
   title,
+  description,
   creator,
   pointCount,
   subscriberCount,
@@ -54,11 +52,9 @@ export function KnowledgeCard({
   isLoggedIn = false,
   isSubscribed = false,
   subscriptionCount = 0,
-  appearDelayMs = 0,
   targetType = "USER",
   targetId,
   onSubscribed,
-  compact = false,
 }: KnowledgeCardProps) {
   const [subscribed, setSubscribed] = useState(isSubscribed);
   const [subCount, setSubCount] = useState(subscriberCount);
@@ -72,7 +68,6 @@ export function KnowledgeCard({
 
   const atSubLimit = subscriptionCount >= MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET;
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
-  const signalValues = [35, 52 + (pointCount % 4) * 9, 72, 44, 60 + (subCount % 3) * 10, 36, 58];
 
   const addTime = () => {
     const val = newTime.trim();
@@ -115,133 +110,87 @@ export function KnowledgeCard({
   };
 
   return (
-    <Card
-      size={compact ? "sm" : "default"}
-      className={cn(
-        "content-card paper-rise card-hover flex flex-col overflow-hidden",
-        compact ? "min-h-[214px]" : "min-h-[220px]",
-      )}
-      style={{ animationDelay: `${appearDelayMs}ms` }}
-    >
-      <CardHeader className={cn("min-w-0 pb-2", compact ? "gap-2" : "gap-3")}>
-        <div className="catalog-meta">
-          <span>KNOWLEDGE DECK</span>
-          <span>KD-{id.slice(-6).toUpperCase()}</span>
-        </div>
-        <Link href={`/knowledge/${id}`} className="block min-w-0 hover:underline">
-          <CardTitle
-            className={cn(
-              "flex items-center gap-2 truncate font-semibold",
-              compact ? "text-base" : "text-lg",
-            )}
-            title={title}
-          >
-            <BookMarked className="size-4 shrink-0 text-primary" />
-            <span className="truncate">{title}</span>
-          </CardTitle>
-        </Link>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-between gap-3">
-        <div className="space-y-3">
-          <SignalBars values={signalValues} />
-          <p className="text-sm text-muted-foreground">
-            创建者：{creator.name ?? "未知"}
-            {creator.uid ? ` (${creator.uid})` : ""}
-          </p>
-          <div className="content-metrics content-metrics-2">
-            <div className="content-stat">
-              <div className="text-xs text-muted-foreground">知识卡</div>
-              <div className="mt-1 text-base font-semibold">{pointCount}</div>
-            </div>
-            <div className="content-stat">
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Users className="size-3.5" aria-hidden />
+    <LearningCatalogCard
+      href={`/knowledge/${id}`}
+      title={title}
+      description={description}
+      creator={`${creator.name ?? "未知"}${creator.uid ? ` · ${creator.uid}` : ""}`}
+      count={pointCount}
+      countLabel="张知识卡"
+      subscribers={subCount}
+      icon={BookMarked}
+      tone="teal"
+      schedule="订阅时设置推送时间"
+      subscribed={subscribed}
+      action={isLoggedIn ? (
+        <>
+          {atSubLimit ? (
+            <Badge variant="secondary" className="text-xs text-muted-foreground">
+              订阅数已满
+            </Badge>
+          ) : (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger render={<Button className="h-9 gap-1.5 px-3" />}>
+                <Plus className="size-3.5" aria-hidden />
                 订阅
-              </div>
-              <div className="mt-1 text-base font-semibold">{subCount}</div>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link href={`/knowledge/${id}`} />}
-            nativeButton={false}
-          >
-            查看详情
-          </Button>
-          {isLoggedIn && !subscribed && (
-            <>
-              {atSubLimit ? (
-                <Badge variant="secondary" className="text-xs text-muted-foreground">
-                  订阅数已满
-                </Badge>
-              ) : (
-                <Dialog open={open} onOpenChange={setOpen}>
-                  <DialogTrigger className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80">
-                    订阅
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>订阅「{title}」</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={loading} />
-                      <div className="space-y-2">
-                        <Label>每日推送时间</Label>
-                        <p className="text-xs text-muted-foreground">
-                          知识卡片会按顺序发送，推完后从头循环。
-                        </p>
-                        <div className="flex gap-2">
-                          <Input
-                            type="time"
-                            value={newTime}
-                            onChange={(e) => setNewTime(e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={addTime}
-                            disabled={atTimeLimit}
-                          >
-                            添加
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {pushTimes.map((time) => (
-                          <Badge
-                            key={time}
-                            render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
-                            className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
-                            onClick={() =>
-                              setPushTimes((prev) => prev.filter((item) => item !== time))
-                            }
-                          >
-                            {time} ×
-                          </Badge>
-                        ))}
-                      </div>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>订阅「{title}」</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={loading} />
+                  <div className="space-y-2">
+                    <Label>每日推送时间</Label>
+                    <p className="text-xs text-muted-foreground">
+                      按顺序推送，后续是否接收新内容由订阅模式决定。
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="time"
+                        value={newTime}
+                        onChange={(e) => setNewTime(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={addTime}
+                        disabled={atTimeLimit}
+                      >
+                        添加
+                      </Button>
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
-                        取消
-                      </Button>
-                      <Button onClick={handleSubscribe} disabled={loading}>
-                        {loading ? "订阅中..." : "确认订阅"}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              )}
-            </>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {pushTimes.map((time) => (
+                      <Badge
+                        key={time}
+                        render={<button type="button" aria-label={`移除 ${time} 推送时间`} />}
+                        className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
+                        onClick={() =>
+                          setPushTimes((prev) => prev.filter((item) => item !== time))
+                        }
+                      >
+                        {time}<X className="size-3" aria-hidden />
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+                    取消
+                  </Button>
+                  <Button onClick={handleSubscribe} disabled={loading}>
+                    {loading ? "订阅中..." : "确认订阅"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
-          {subscribed && <Badge className="border-0 bg-success/10 text-success">已订阅</Badge>}
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      ) : <Button variant="ghost" className="h-9 px-2 text-primary" render={<Link href={`/knowledge/${id}`} />} nativeButton={false}>查看详情</Button>}
+    />
   );
 }

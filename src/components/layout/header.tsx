@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  BookOpenCheck,
   Compass,
   Github,
   LayoutDashboard,
@@ -52,10 +53,8 @@ export function Header() {
     <header className="nav-chrome sticky top-0 z-50">
       <div className="nav-shell mx-auto flex w-full max-w-[1440px] min-w-0 items-center justify-between px-5 sm:px-7 lg:px-10">
         <Link href="/" className="brand-card flex min-w-0 items-center gap-3">
-          <span className="brand-tile flex size-9 shrink-0 items-end justify-center gap-[3px] rounded-md pb-2" aria-hidden="true">
-            <span className="h-2.5 w-[3px] bg-current" />
-            <span className="h-4 w-[3px] bg-current" />
-            <span className="h-3 w-[3px] bg-current" />
+          <span className="brand-tile flex size-9 shrink-0 items-center justify-center rounded-md" aria-hidden="true">
+            <BookOpenCheck className="size-5" />
           </span>
           <span className="min-w-0">
             <span className="block text-base font-bold leading-5 text-foreground">

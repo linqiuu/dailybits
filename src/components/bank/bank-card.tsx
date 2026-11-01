@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CalendarClock, CheckCircle2, Clock, Users, X } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BookOpenCheck, Clock, Plus, X } from "lucide-react";
+import { LearningCatalogCard } from "@/components/ui/learning-catalog-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,14 +30,12 @@ import {
   formatSubscriptionSchedule,
   isValidPushTime,
 } from "@/lib/subscriptions/schedule";
-import { cn } from "@/lib/utils";
-import { SignalBars } from "@/components/ui/signal-bars";
 
 export interface BankCardProps {
   id: string;
   title: string;
   description: string | null;
-  creator: { id: string; name: string | null; image: string | null; uid?: string | null };
+  creator: { id: string; name: string | null; image: string | null; uid?: string | null; };
   questionCount: number;
   subscriberCount: number;
   answerCount?: number;
@@ -51,8 +49,6 @@ export interface BankCardProps {
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
   subscriptionCount?: number;
-  appearDelayMs?: number;
-  compact?: boolean;
 }
 
 export function BankCard({
@@ -73,8 +69,6 @@ export function BankCard({
   isLoggedIn = false,
   isSubscribed = false,
   subscriptionCount = 0,
-  appearDelayMs = 0,
-  compact = false,
 }: BankCardProps) {
   const [subscribed, setSubscribed] = useState(isSubscribed);
   const [subCount, setSubCount] = useState(subscriberCount);
@@ -99,15 +93,6 @@ export function BankCard({
   });
   const accuracy =
     answerCount > 0 ? Math.round((correctAnswerCount / answerCount) * 1000) / 10 : null;
-  const signalValues = [
-    28 + (questionCount % 5) * 9,
-    42 + (subCount % 4) * 10,
-    32 + (answererCount % 6) * 8,
-    66,
-    48 + ((questionCount + subCount) % 5) * 8,
-    38,
-    accuracy ?? 54,
-  ];
 
   const addTime = () => {
     const val = newTime.trim();
@@ -159,181 +144,102 @@ export function BankCard({
   };
 
   return (
-    <Card
-      size={compact ? "sm" : "default"}
-      className={cn(
-        "content-card paper-rise card-hover flex flex-col overflow-hidden",
-        compact ? "min-h-[214px]" : "min-h-[230px]",
-      )}
-      style={{ animationDelay: `${appearDelayMs}ms` }}
-    >
-      <CardHeader className={cn("min-w-0 pb-2", compact ? "gap-2" : "gap-3")}>
-        <div className="catalog-meta">
-          <span>QUESTION BANK</span>
-          <span>QB-{id.slice(-6).toUpperCase()}</span>
-        </div>
-        <div className="flex min-w-0 items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <Link href={`/bank/${id}`} className="block min-w-0 hover:underline">
-              <CardTitle
-                className={cn("truncate font-semibold", compact ? "text-base group-data-[size=sm]/card:text-base" : "text-lg")}
-                title={title}
-              >
-                {title}
-              </CardTitle>
-            </Link>
-            <p className="truncate text-xs text-muted-foreground">
-              创建者：{creator.name ?? "未知"}
-              {creator.uid ? ` (${creator.uid})` : ""}
-            </p>
-          </div>
-          {subscribed ? (
-            <Badge className="shrink-0 border-0 bg-success/10 text-success">
-              已订阅
+    <LearningCatalogCard
+      href={`/bank/${id}`}
+      title={title}
+      description={description}
+      creator={`${creator.name ?? "未知"}${creator.uid ? ` · ${creator.uid}` : ""}`}
+      count={questionCount}
+      countLabel="道题"
+      subscribers={subCount}
+      icon={BookOpenCheck}
+      schedule={scheduleSummary}
+      subscribed={subscribed}
+      activity={accuracy !== null ? `${answererCount} 人答题 · ${answerCount} 次作答 · 正确率 ${accuracy}%` : undefined}
+      action={isLoggedIn ? (
+        <>
+          {atSubLimit ? (
+            <Badge variant="secondary" className="text-xs text-muted-foreground">
+              订阅数已满 {MAX_SUBSCRIPTIONS_PER_TARGET}/{MAX_SUBSCRIPTIONS_PER_TARGET}
             </Badge>
-          ) : null}
-        </div>
-        {description ? (
-          <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-        ) : <p className="text-sm leading-6 text-muted-foreground">按你的节奏持续练习，记录每次答题表现。</p>}
-      </CardHeader>
-      <CardContent className={cn("flex flex-1 flex-col justify-between", compact ? "gap-3" : "gap-4")}>
-        <div className="space-y-3">
-          <SignalBars values={signalValues} />
-          <div className="content-metrics">
-            <Stat label="题目" value={questionCount} />
-            <Stat label="订阅" value={subCount} icon={Users} />
-            <Stat label="答题人数" value={answererCount} icon={CheckCircle2} />
-          </div>
-          {accuracy !== null ? (
-            <div className="label-chip">
-              <CheckCircle2 className="size-3.5" aria-hidden />
-              {answerCount} 次答题，正确率 {accuracy}%
-            </div>
-          ) : null}
-          <div className="label-chip min-w-0">
-            <CalendarClock className="size-3.5 shrink-0 text-primary" aria-hidden />
-            <span className="truncate">{scheduleSummary}</span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link href={`/bank/${id}`} />}
-            nativeButton={false}
-          >
-            查看详情
-          </Button>
-          {isLoggedIn && !subscribed && (
-            <>
-              {atSubLimit ? (
-                <Badge variant="secondary" className="text-xs text-muted-foreground">
-                  订阅数已满 {MAX_SUBSCRIPTIONS_PER_TARGET}/{MAX_SUBSCRIPTIONS_PER_TARGET}
-                </Badge>
-              ) : (
-                <Dialog open={open} onOpenChange={setOpen}>
-                  <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
-                    订阅
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>订阅「{title}」</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount}
-                        onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={loading} />
-                      {!fixedSchedule && <>
-                      <div className="space-y-2">
-                        <Label>选择每日推送时间</Label>
-                        <p className="text-xs text-muted-foreground">
-                          默认仅工作日推送（自动跳过周末与法定节假日），最多 {MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个时间点
-                        </p>
-                        <div className="flex gap-2">
-                          <Input
-                            id={`push-time-${id}`}
-                            aria-label="新增推送时间"
-                            type="time"
-                            value={newTime}
-                            onChange={(e) => setNewTime(e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            onClick={addTime}
-                            disabled={atTimeLimit}
-                          >
-                            添加
-                          </Button>
-                        </div>
-                        {atTimeLimit && (
-                          <p className="text-xs text-amber-600">
-                            已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
-                          </p>
-                        )}
+          ) : (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger render={<Button className="h-9 gap-1.5 px-3" />}>
+                <Plus className="size-3.5" aria-hidden />
+                订阅
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>订阅「{title}」</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount}
+                    onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={loading} />
+                  {!fixedSchedule && <>
+                    <div className="space-y-2">
+                      <Label>选择每日推送时间</Label>
+                      <p className="text-xs text-muted-foreground">
+                        默认仅工作日推送（自动跳过周末与法定节假日），最多 {MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个时间点
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          id={`push-time-${id}`}
+                          aria-label="新增推送时间"
+                          type="time"
+                          value={newTime}
+                          onChange={(e) => setNewTime(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={addTime}
+                          disabled={atTimeLimit}
+                        >
+                          添加
+                        </Button>
                       </div>
-                      {pushTimes.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {pushTimes.map((t) => (
-                            <Badge
-                              key={t}
-                              render={<button type="button" aria-label={`移除 ${t} 推送时间`} />}
-                              className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
-                              onClick={() => removeTime(t)}
-                            >
-                              <Clock className="size-3" />
-                              {t}<X className="size-3" aria-hidden />
-                            </Badge>
-                          ))}
-                        </div>
+                      {atTimeLimit && (
+                        <p className="text-xs text-amber-600">
+                          已达上限 {MAX_PUSH_TIMES_PER_SUBSCRIPTION}/{MAX_PUSH_TIMES_PER_SUBSCRIPTION}
+                        </p>
                       )}
-                      {pushTimes.length === 0 && (
-                        <p className="text-xs text-muted-foreground">点击「添加」设定推送时间，支持多个时间点</p>
-                      )}
-                      </>}
-                      {fixedSchedule && <p className="text-sm text-muted-foreground">{scheduleSummary}</p>}
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
-                        取消
-                      </Button>
-                      <Button onClick={handleSubscribe} disabled={loading}>
-                        {loading ? "订阅中..." : "确认订阅"}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              )}
-            </>
+                    {pushTimes.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {pushTimes.map((t) => (
+                          <Badge
+                            key={t}
+                            render={<button type="button" aria-label={`移除 ${t} 推送时间`} />}
+                            className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
+                            onClick={() => removeTime(t)}
+                          >
+                            <Clock className="size-3" />
+                            {t}<X className="size-3" aria-hidden />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {pushTimes.length === 0 && (
+                      <p className="text-xs text-muted-foreground">点击「添加」设定推送时间，支持多个时间点</p>
+                    )}
+                  </>}
+                  {fixedSchedule && <p className="text-sm text-muted-foreground">{scheduleSummary}</p>}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+                    取消
+                  </Button>
+                  <Button onClick={handleSubscribe} disabled={loading}>
+                    {loading ? "订阅中..." : "确认订阅"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  icon?: typeof Users;
-}) {
-  return (
-    <div className="content-stat">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="truncate text-sm font-semibold text-foreground">
-        {value}
-      </div>
-    </div>
+        </>
+      ) : <Button variant="ghost" className="h-9 px-2 text-primary" render={<Link href={`/bank/${id}`} />} nativeButton={false}>查看详情</Button>}
+    />
   );
 }

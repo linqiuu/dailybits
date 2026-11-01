@@ -25,6 +25,23 @@ test("digest subscription cards show subscriber counts as title-row badges", () 
   );
 });
 
+test("digest scheduling is disclosed only after an explicit subscribe or edit action", () => {
+  assert.match(source, /isEditing \? \([\s\S]*<form className="digest-editor"/);
+  assert.match(source, /onClick=\{\(\) => setEditingType\(option\.type\)\}/);
+  assert.match(source, /isValidPushTime\(pushTime\)/);
+  assert.match(source, /new FormData\(event\.currentTarget\)\.get\("pushTime"\)/);
+  assert.match(source, /pushTimes: \[pushTime\]/);
+  assert.match(source, /setEditingType\(null\)/);
+  assert.match(source, /getTime\(sub, option\)/);
+});
+
+test("digest editor restores keyboard focus and does not display unknown counts as zero", () => {
+  assert.match(source, /actionRefs\.current\[returnFocusTo\.current\]\?\.focus\(\)/);
+  assert.match(source, /required autoFocus/);
+  assert.match(source, /countsAvailable \? <Badge/);
+  assert.match(source, /disabled=\{savingType !== null\}/);
+});
+
 test("digest subscription cards render only subscribable digest options", () => {
   assert.match(source, /SUBSCRIBABLE_DIGEST_TYPES/);
   assert.match(

@@ -101,21 +101,22 @@ export function BankExplorer({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="stream-toolbar flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4">
-        <div className="relative min-w-0 flex-1">
+    <div className="space-y-4">
+      <div className="stream-toolbar flex flex-wrap items-center gap-3">
+        <div className="relative w-full min-w-0 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label="搜索题库"
             placeholder="搜索题库..."
             value={search}
             onChange={handleSearchChange}
-            className="h-11 rounded-[var(--radius)] border-border/80 bg-card pl-10 pr-3 shadow-none focus-visible:ring-primary/20"
+            className="h-10 border-border bg-card pl-10 pr-3 shadow-none"
           />
         </div>
+        {!loading && !error && data ? <span className="text-xs text-muted-foreground" aria-live="polite">{data.total} 个题库</span> : null}
         {data?.isLoggedIn && showCreate ? (
           <Button
-            className="h-11 shrink-0 sm:px-5"
+            className="ml-auto h-10 shrink-0"
             size="lg"
             render={<Link href="/bank/new" />}
             nativeButton={false}
@@ -126,23 +127,19 @@ export function BankExplorer({
       </div>
 
       {loading ? (
-        <SkeletonCardGrid />
+        <SkeletonCardGrid catalog={layout === "list"} />
       ) : error ? (
         <RequestState title="题库暂时加载失败" onRetry={fetchBanks} />
       ) : data?.banks.length ? (
         <>
-          <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
-            <span>共 {data.total} 个题库</span>
-            <span>第 {page} / {data.totalPages} 页</span>
-          </div>
           <div
             className={
               layout === "list"
-                ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
                 : "grid grid-cols-1 gap-4 md:grid-cols-2"
             }
           >
-            {data.banks.map((bank, index) => (
+            {data.banks.map((bank) => (
               <div key={bank.id} className="w-full">
                 <BankCard
                   id={bank.id}
@@ -162,8 +159,6 @@ export function BankExplorer({
                   isLoggedIn={data?.isLoggedIn}
                   isSubscribed={bank.isSubscribed}
                   subscriptionCount={data?.subscriptionCount ?? 0}
-                  appearDelayMs={index * 70}
-                  compact={layout === "list"}
                 />
               </div>
             ))}

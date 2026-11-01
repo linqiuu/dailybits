@@ -1,5 +1,4 @@
 import {
-  ArrowRight,
   BookOpenCheck,
   Brain,
   ChevronDown,
@@ -37,7 +36,7 @@ const channels = [
     icon: Brain,
   },
   {
-    label: "AI 资讯",
+    label: "资讯与热榜",
     value: "digests",
     icon: Newspaper,
   },
@@ -56,47 +55,26 @@ const creationLinks = [
     title: "创建知识库",
     detail: "整理短知识点，之后按用户选择的时间推送。",
   },
-  {
-    href: "/digest-preview",
-    icon: Newspaper,
-    title: "预览推送卡片",
-    detail: "查看新闻、热榜和知识卡片在 IM 里的页面效果。",
-  },
 ];
 
 export default function Home() {
-  const today = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-  }).format(new Date());
-
   return (
     <div className="home-index page-enter">
       <section className="home-frame">
         <div className="home-command">
-          <div className="min-w-0">
-            <h1 className="home-title">
-              今天学点什么？
-            </h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              从团队共享的题库、知识卡与 AI 动态里，挑一份加入你的学习节奏。
-            </p>
-          </div>
+          <h1 className="home-title">发现内容</h1>
           <div className="home-actions">
-            <span className="home-date" aria-label={`今天是 ${today}`}>{today}</span>
             <Button
-              className="home-secondary-action"
-              variant="outline"
-              render={<Link href="/dashboard" />}
+              className="h-9 text-muted-foreground"
+              variant="ghost"
+              render={<Link href="/digest-preview" />}
               nativeButton={false}
             >
-              我的学习
-              <ArrowRight className="size-4" aria-hidden />
+              <Newspaper className="size-4" aria-hidden />
+              卡片预览
             </Button>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button className="home-primary-action" />}>
+              <DropdownMenuTrigger render={<Button className="home-primary-action h-9 px-3.5" />}>
                 <Plus className="size-4" aria-hidden />
                 创建
                 <ChevronDown className="size-3.5" aria-hidden />
@@ -126,21 +104,21 @@ export default function Home() {
         <Tabs defaultValue="banks" className="home-workspace">
           <div className="home-channel-rail">
             <TabsList variant="line" className="home-channel-list">
-            {channels.map((item) => {
-              const Icon = item.icon;
-              return (
-                <TabsTrigger
-                  key={item.value}
-                  value={item.value}
-                  className="home-channel-tab"
-                >
-                  <span className="home-channel-icon">
-                    <Icon className="size-4 shrink-0" aria-hidden />
-                  </span>
-                  <span className="truncate">{item.label}</span>
-                </TabsTrigger>
-              );
-            })}
+              {channels.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <TabsTrigger
+                    key={item.value}
+                    value={item.value}
+                    className="home-channel-tab"
+                  >
+                    <span className="home-channel-icon">
+                      <Icon className="size-4 shrink-0" aria-hidden />
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </div>
 

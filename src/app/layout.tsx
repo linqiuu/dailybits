@@ -22,7 +22,7 @@ export default function RootLayout({
           data-impeccable-direction="d1f8fdbb"
           dangerouslySetInnerHTML={{
             __html:
-              "<!-- THESIS: DailyBits is a living learning catalogue, not a SaaS dashboard. OWN-WORLD: independent editorial catalogues and record sleeves lend warm paper, black ink, signal lime, compact metadata and one rhythmic bar motif. STORY: choose a channel, scan dense real material, subscribe, create, and return to progress. FIRST VIEWPORT: a compact masthead and channel rail lead directly into the catalogue. FORM: standard product controls inside a distinctive publishing system. SEED: d1f8fdbb9c8b8eda. -->",
+              "<!-- DailyBits is a content-first learning catalogue: compact navigation, real descriptions, inline metadata and progressive subscription settings. No decorative charts or technical identifiers. -->",
           }}
         />
         <Providers>
