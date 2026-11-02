@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { pushToTarget, sendToTarget } from "./adapter";
+import { buildPayload } from "./payload";
 import type { DigestPushPayload, PushPayload } from "../../types";
 
 test("maps question pushes to card-service QA cards", async () => {
@@ -54,7 +55,6 @@ test("maps question pushes to card-service QA cards", async () => {
         d: "位图",
       },
       analysis: "自注意力让 token 之间直接建模依赖关系。",
-      scene: "AI 基础题",
       source_system: "dailybits",
       business_id: "question-1",
     });
@@ -62,6 +62,51 @@ test("maps question pushes to card-service QA cards", async () => {
     restoreEnv("PUSH_PROVIDER", originalProvider);
     restoreEnv("CARD_SERVICE_API_BASE", originalBase);
     restoreEnv("CARD_SERVICE_SEND_API_KEY", originalKey);
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("QA requests omit empty scenes and preserve explicitly provided nonempty scenes", async () => {
+  const originalEnv = saveEnv([
+    "PUSH_PROVIDER",
+    "CARD_SERVICE_API_BASE",
+    "CARD_SERVICE_SEND_API_KEY",
+  ]);
+  const originalFetch = globalThis.fetch;
+  const requests: Record<string, unknown>[] = [];
+
+  process.env.PUSH_PROVIDER = "card-service";
+  process.env.CARD_SERVICE_API_BASE = "http://127.0.0.1:10120";
+  process.env.CARD_SERVICE_SEND_API_KEY = "fixture-key";
+  globalThis.fetch = (async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    for (const scene of [undefined, null, "", " \t\n ", "custom-scene", " custom-scene "]) {
+      const payload = buildPayload("fixture-user", "题库名称不能作为 scene 兜底", {
+        content: "测试题目",
+        options: ["A", "B", "C", "D"],
+        correctAnswer: "A",
+        explanation: "测试解析",
+      });
+      assert.equal(Object.hasOwn(payload, "scene"), false);
+      // Include null to exercise callers outside the TypeScript contract.
+      if (scene !== undefined) Object.assign(payload, { scene });
+
+      assert.equal(await pushToTarget(payload), true);
+      const request = requests.at(-1)!;
+      if (scene?.trim()) {
+        assert.equal(Object.hasOwn(request, "scene"), true);
+        assert.equal(request.scene, scene);
+      } else {
+        assert.equal(Object.hasOwn(request, "scene"), false);
+      }
+    }
+    assert.equal(requests.length, 6);
+  } finally {
+    restoreEnvMap(originalEnv);
     globalThis.fetch = originalFetch;
   }
 });

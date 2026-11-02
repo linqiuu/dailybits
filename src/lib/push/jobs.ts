@@ -97,7 +97,7 @@ async function preparePayload(prisma: PrismaClient, job: DeliveryJob, timezone: 
     }
     const { question, cycle } = selected;
     await prisma.subscription.updateMany({ where: { id: sub.id, generation: sub.generation, ...runnableSubscriptionWhere }, data: { status: "ACTIVE" } });
-    return { payload: { ...buildPayload(receiver, sub.bank.title, question, { authorId: sub.bank.creatorId, businessId: question.id, domain: sub.bank.title, scene: "daily-question" }), idempotencyKey: job.dedupeKey }, cycle, generation: sub.generation };
+    return { payload: { ...buildPayload(receiver, sub.bank.title, question, { authorId: sub.bank.creatorId, businessId: question.id, domain: sub.bank.title }), idempotencyKey: job.dedupeKey }, cycle, generation: sub.generation };
   }
   if (job.kind === "KNOWLEDGE") {
     const sub = await prisma.knowledgeSubscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });

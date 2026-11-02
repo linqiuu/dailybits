@@ -119,7 +119,7 @@ function buildCardServiceQaPayload(
     answer,
     choices,
     analysis: payload.explanation,
-    scene: payload.scene ?? payload.title,
+    ...(payload.scene?.trim() ? { scene: payload.scene } : {}),
     source_system: "dailybits",
     business_id: payload.businessId,
     ...(process.env.CARD_SERVICE_QA_ANSWER_CALLBACK_URL?.trim()
