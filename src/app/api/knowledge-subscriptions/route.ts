@@ -8,6 +8,7 @@ import {
   SubscriptionPolicyError,
 } from "@/lib/subscriptions/policy";
 import { MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET } from "@/types";
+import { isGroupId } from "@/lib/groups/identity";
 export async function GET(request: NextRequest) {
   const session = await getCurrentSession();
   if (!session)
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
       : request.nextUrl.searchParams.get("targetId");
   if ((targetType !== "USER" && targetType !== "GROUP") || !targetId)
     return NextResponse.json({ error: "订阅目标无效" }, { status: 400 });
+  if (targetType === "GROUP" && !isGroupId(targetId))
+    return NextResponse.json({ error: "群号无效" }, { status: 400 });
   try {
     const subscriptions = await listKnowledgeSubscriptions(
       prisma,

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -19,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { SubscriptionPolicyFields } from "./subscription-policy-fields";
 import type { LearningSubscriptionMode } from "@/types";
 import { toast } from "sonner";
+import { isGroupId } from "@/lib/groups/identity";
 import {
   MAX_SUBSCRIPTIONS_PER_TARGET,
   MAX_PUSH_TIMES_PER_SUBSCRIPTION,
@@ -49,6 +51,9 @@ export interface BankCardProps {
   isLoggedIn?: boolean;
   isSubscribed?: boolean;
   subscriptionCount?: number;
+  targetType?: "USER" | "GROUP";
+  targetId?: string;
+  onSubscribed?: () => void;
 }
 
 export function BankCard({
@@ -69,6 +74,9 @@ export function BankCard({
   isLoggedIn = false,
   isSubscribed = false,
   subscriptionCount = 0,
+  targetType = "USER",
+  targetId,
+  onSubscribed,
 }: BankCardProps) {
   const [subscribed, setSubscribed] = useState(isSubscribed);
   const [subCount, setSubCount] = useState(subscriberCount);
@@ -106,6 +114,10 @@ export function BankCard({
   };
 
   const handleSubscribe = async () => {
+    if (targetType === "GROUP" && !isGroupId(targetId)) {
+      toast.error("群号无效，请重新选择接收群");
+      return;
+    }
     if (!fixedSchedule && pushTimes.length === 0) {
       toast.error("请至少添加一个推送时间");
       return;
@@ -116,7 +128,7 @@ export function BankCard({
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/subscriptions", {
+      const res = await fetch(targetType === "GROUP" ? `/api/group/${targetId}/subscriptions` : "/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,10 +144,11 @@ export function BankCard({
         toast.error(data.error ?? "订阅失败");
         return;
       }
-      toast.success("订阅成功");
+      toast.success(targetType === "GROUP" ? `已订阅到群 ${targetId}` : "订阅成功");
       setSubscribed(true);
       setSubCount((c) => c + 1);
       setOpen(false);
+      onSubscribed?.();
     } catch {
       toast.error("订阅失败，请稍后重试");
     } finally {
@@ -166,11 +179,12 @@ export function BankCard({
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger render={<Button className="h-9 gap-1.5 px-3" />}>
                 <Plus className="size-3.5" aria-hidden />
-                订阅
+                {targetType === "GROUP" ? "订阅到群" : "订阅"}
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>订阅「{title}」</DialogTitle>
+                  {targetType === "GROUP" ? <DialogDescription className="break-all">接收群：{targetId}</DialogDescription> : null}
                 </DialogHeader>
                 <div className="space-y-4">
                   <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount}
@@ -232,7 +246,7 @@ export function BankCard({
                     取消
                   </Button>
                   <Button onClick={handleSubscribe} disabled={loading}>
-                    {loading ? "订阅中..." : "确认订阅"}
+                    {loading ? "订阅中..." : targetType === "GROUP" ? "确认订阅到群" : "确认订阅"}
                   </Button>
                 </DialogFooter>
               </DialogContent>

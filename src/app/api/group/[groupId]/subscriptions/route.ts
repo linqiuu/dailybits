@@ -8,12 +8,15 @@ import {
   SubscriptionPolicyError,
 } from "@/lib/subscriptions/policy";
 import { MAX_SUBSCRIPTIONS_PER_TARGET } from "@/types";
+import { isGroupId } from "@/lib/groups/identity";
 type Context = { params: Promise<{ groupId: string }> };
 export async function GET(_request: NextRequest, context: Context) {
   const session = await getCurrentSession();
   if (!session)
     return NextResponse.json({ error: "请先登录" }, { status: 401 });
   const { groupId } = await context.params;
+  if (!isGroupId(groupId))
+    return NextResponse.json({ error: "群号无效" }, { status: 400 });
   try {
     const subscriptions = await listQuestionSubscriptions(
       prisma,
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest, context: Context) {
     if (!session)
       return NextResponse.json({ error: "请先登录" }, { status: 401 });
     const { groupId } = await context.params;
-    if (!/^\d+$/.test(groupId))
+    if (!isGroupId(groupId))
       return NextResponse.json({ error: "群号无效" }, { status: 400 });
     const body = await request.json();
     if (!body || typeof body !== "object" || Array.isArray(body))

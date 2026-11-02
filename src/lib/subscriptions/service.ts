@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "../../generated/prisma/client";
 import { canManageSubscription, canSubscribeContent } from "../content/access";
+import { isGroupId } from "../groups/identity";
 import { normalizePushTimes } from "./schedule";
 import {
   isPushTimeCountAllowedForUpdate,
@@ -85,6 +86,8 @@ export async function createLearningSubscription(
   )
     throw new SubscriptionPolicyError("题库或订阅目标无效");
   const bankId = body.bankId.trim();
+  if (targetType === "GROUP" && !isGroupId(targetId.trim()))
+    throw new SubscriptionPolicyError("群号无效");
   const target: {
     targetType: "USER" | "GROUP";
     targetId: string;

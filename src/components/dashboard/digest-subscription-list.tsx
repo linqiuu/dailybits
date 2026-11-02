@@ -115,6 +115,7 @@ export function DigestSubscriptionList({
 }: DigestSubscriptionListProps = {}) {
   const { status } = useSession();
   const [subscriptions, setSubscriptions] = useState<DigestSubscription[]>([]);
+  const [groupSubscribedTypes, setGroupSubscribedTypes] = useState<DigestType[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [savingType, setSavingType] = useState<DigestType | null>(null);
@@ -150,15 +151,15 @@ export function DigestSubscriptionList({
 
   const isGroupTarget = targetType === "GROUP";
   const collectionEndpoint =
-    isGroupTarget && targetId
+    isGroupTarget
       ? `/api/group/${targetId}/digest-subscriptions`
       : "/api/digest-subscriptions/mine";
   const createEndpoint =
-    isGroupTarget && targetId
+    isGroupTarget
       ? `/api/group/${targetId}/digest-subscriptions`
       : "/api/digest-subscriptions";
   const itemEndpoint = (id: string) =>
-    isGroupTarget && targetId
+    isGroupTarget
       ? `/api/group/${targetId}/digest-subscriptions/${id}`
       : `/api/digest-subscriptions/${id}`;
 
@@ -167,6 +168,7 @@ export function DigestSubscriptionList({
     const res = await fetch(collectionEndpoint);
     if (!res.ok) { setFailed(true); throw new Error("Unavailable"); }
     const data = await res.json();
+    setGroupSubscribedTypes(Array.isArray(data?.subscribedTypes) ? data.subscribedTypes : []);
     const counts = parseSubscriberCounts(data);
     const items = Array.isArray(data)
       ? data
@@ -230,7 +232,7 @@ export function DigestSubscriptionList({
         toast.error(data.error ?? "订阅失败");
         return;
       }
-      toast.success("已订阅每日摘要");
+      toast.success(isGroupTarget ? `已订阅到群 ${targetId}` : "已订阅每日摘要");
       await refresh();
       setEditingType(null);
     } catch {
@@ -325,6 +327,7 @@ export function DigestSubscriptionList({
           const Icon = option.icon;
           const isSaving = savingType === option.type;
           const isEditing = editingType === option.type;
+          const managedByOther = isGroupTarget && !sub && groupSubscribedTypes.includes(option.type);
 
           return (
             <Card
@@ -357,6 +360,7 @@ export function DigestSubscriptionList({
                     const pushTime = String(new FormData(event.currentTarget).get("pushTime") ?? "");
                     void (sub ? updateTime(sub, pushTime) : subscribe(option, pushTime));
                   }} aria-label={`${option.title}推送设置`}>
+                    {isGroupTarget ? <p className="break-all text-xs text-muted-foreground">接收群：{targetId} · 中国标准时间（UTC+8）</p> : null}
                     <div className="space-y-2">
                       <Label htmlFor={`digest-time-${targetType}-${targetId ?? "self"}-${option.type}`}>每日推送时间</Label>
                       <Input id={`digest-time-${targetType}-${targetId ?? "self"}-${option.type}`} className="h-9 w-36" name="pushTime" type="time" required autoFocus
@@ -368,20 +372,20 @@ export function DigestSubscriptionList({
                         setEditingType(null);
                         setDraftTimes((prev) => ({ ...prev, [option.type]: getTime(sub, option) }));
                       }}>取消</Button>
-                      <Button type="submit" className="h-9" disabled={isSaving}>{isSaving ? "保存中…" : sub ? "保存" : "确认订阅"}</Button>
+                      <Button type="submit" className="h-9" disabled={isSaving}>{isSaving ? "保存中…" : sub ? "保存" : isGroupTarget ? "确认订阅到群" : "确认订阅"}</Button>
                     </div>
                   </form>
                 ) : (
                   <div className="digest-footer">
                     <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                      {sub ? <><Check className="size-3.5 text-success" aria-hidden /><span>已订阅 · {getTime(sub, option)}</span></> : <><CalendarClock className="size-3.5" aria-hidden /><span>每天更新 · 时间自选</span></>}
+                      {sub ? <><Check className="size-3.5 text-success" aria-hidden /><span>已订阅 · {getTime(sub, option)}</span></> : managedByOther ? <><Check className="size-3.5 text-success" aria-hidden /><span>群已订阅</span></> : <><CalendarClock className="size-3.5" aria-hidden /><span>每天更新 · 时间自选</span></>}
                     </div>
                     {status !== "authenticated" ? <Button className="h-9" variant="outline" onClick={startLogin}>登录后订阅</Button> : sub ? (
                       <div className="flex gap-1">
                         <Button ref={(node) => { actionRefs.current[option.type] = node; }} variant="ghost" className="h-9 text-muted-foreground" onClick={() => setEditingType(option.type)} disabled={savingType !== null}><Pencil className="size-3.5" aria-hidden />修改时间</Button>
                         <Button variant="ghost" className="size-9 text-muted-foreground hover:text-destructive" size="icon" title={`取消订阅 ${option.title}`} aria-label={`取消订阅 ${option.title}`} onClick={() => unsubscribe(sub)} disabled={savingType !== null}><Trash2 className="size-3.5" aria-hidden /></Button>
                       </div>
-                    ) : <Button ref={(node) => { actionRefs.current[option.type] = node; }} className="h-9 px-3" onClick={() => setEditingType(option.type)} disabled={savingType !== null}><Plus className="size-3.5" aria-hidden />订阅</Button>}
+                    ) : managedByOther ? <span className="text-xs text-muted-foreground">由其他用户管理</span> : <Button ref={(node) => { actionRefs.current[option.type] = node; }} className="h-9 px-3" onClick={() => setEditingType(option.type)} disabled={savingType !== null}><Plus className="size-3.5" aria-hidden />{isGroupTarget ? "订阅到群" : "订阅"}</Button>}
                   </div>
                 )}
               </CardContent>

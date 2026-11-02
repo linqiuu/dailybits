@@ -8,6 +8,7 @@ import {
 import { buildDigestSubscriptionCounts } from "@/lib/digest/subscription-counts";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionReuseAction } from "@/lib/subscriptions/reuse";
+import { isGroupId } from "@/lib/groups/identity";
 import {
   DEFAULT_DIGEST_PUSH_TIMES,
   MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET,
@@ -63,7 +64,8 @@ export async function GET(
     const { groupId } = await context.params;
     const session = await getCurrentSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const [subscriptions, countRows] = await Promise.all([
+    if (!isGroupId(groupId)) return NextResponse.json({ error: "群号无效" }, { status: 400 });
+    const [subscriptions, countRows, groupSubscriptions] = await Promise.all([
       prisma.digestSubscription.findMany({
         where: {
           targetType: "GROUP",
@@ -78,11 +80,16 @@ export async function GET(
         where: { isActive: true },
         _count: { _all: true },
       }),
+      prisma.digestSubscription.findMany({
+        where: { targetType: "GROUP", targetId: groupId, isActive: true },
+        select: { digestType: true },
+      }),
     ]);
 
     return NextResponse.json({
       subscriptions,
-      count: subscriptions.length,
+      count: groupSubscriptions.length,
+      subscribedTypes: groupSubscriptions.map((sub) => sub.digestType),
       limit: MAX_DIGEST_SUBSCRIPTIONS_PER_TARGET,
       subscriberCounts: buildDigestSubscriptionCounts(countRows),
     });
@@ -106,7 +113,9 @@ export async function POST(
     }
 
     const { groupId } = await context.params;
+    if (!isGroupId(groupId)) return NextResponse.json({ error: "群号无效" }, { status: 400 });
     const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "请求内容无效" }, { status: 400 });
     const digestType = parseDigestType((body as { digestType?: unknown }).digestType);
     if (digestType instanceof NextResponse) return digestType;
 
@@ -123,11 +132,11 @@ export async function POST(
       },
     });
     if (existing) {
-      if (!canManageSubscription(existing, session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (!canManageSubscription(existing, session.user)) return NextResponse.json({ error: "该群已由其他用户订阅此资讯，请联系订阅创建者或管理员" }, { status: 403 });
       const reuse = getSubscriptionReuseAction(existing);
       if (reuse.action === "conflict") {
         return NextResponse.json(
-          { error: "Already subscribed to this digest" },
+          { error: "该群已订阅此资讯，请刷新页面" },
           { status: 409 },
         );
       }

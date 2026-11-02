@@ -39,13 +39,19 @@ interface ApiResponse {
 }
 
 export function BankExplorer({
+  targetType = "USER",
+  targetId,
   showCreate = true,
   emptyVariant = "default",
   layout = "grid",
+  onSubscribed,
 }: {
+  targetType?: "USER" | "GROUP";
+  targetId?: string;
   showCreate?: boolean;
   emptyVariant?: "default" | "compact";
   layout?: "grid" | "list";
+  onSubscribed?: () => void;
 } = {}) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -68,8 +74,10 @@ export function BankExplorer({
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("search", debouncedSearch);
     params.set("page", String(page));
+    params.set("targetType", targetType);
+    if (targetId) params.set("targetId", targetId);
     fetch(`/api/banks?${params}`)
-      .then((res) => res.json())
+      .then((res) => { if (!res.ok) throw new Error("Unavailable"); return res.json(); })
       .then((json: ApiResponse | { error: string }) => {
         if (id !== fetchIdRef.current) return;
         if ("error" in json) {
@@ -88,7 +96,7 @@ export function BankExplorer({
       .finally(() => {
         if (id === fetchIdRef.current) setLoading(false);
       });
-  }, [debouncedSearch, page]);
+  }, [debouncedSearch, page, targetType, targetId]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchBanks, 0);
@@ -159,6 +167,9 @@ export function BankExplorer({
                   isLoggedIn={data?.isLoggedIn}
                   isSubscribed={bank.isSubscribed}
                   subscriptionCount={data?.subscriptionCount ?? 0}
+                  targetType={targetType}
+                  targetId={targetId}
+                  onSubscribed={() => { fetchBanks(); onSubscribed?.(); }}
                 />
               </div>
             ))}
@@ -196,9 +207,9 @@ export function BankExplorer({
         />
       ) : (
         <EmptyState
-          title="尚无题库，成为第一个创建者"
-          description="创建你的第一个题库，开始每日一题"
-          action={{ label: "创建题库", href: "/bank/new" }}
+          title={targetType === "GROUP" ? "暂无可供群订阅的公开题库" : "尚无题库，成为第一个创建者"}
+          description={targetType === "GROUP" ? "公开题库发布后会显示在这里。" : "创建你的第一个题库，开始每日一题"}
+          action={showCreate ? { label: "创建题库", href: "/bank/new" } : undefined}
           variant={emptyVariant}
         />
       )}

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isGroupId } from "@/lib/groups/identity";
 import { getCurrentSession, getSessionDepartmentKeys } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseQuestionBankSchedule } from "@/lib/subscriptions/schedule";
@@ -119,6 +120,13 @@ export async function GET(request: NextRequest) {
 
     const session = await getCurrentSession();
 
+    if (targetType !== "USER" && targetType !== "GROUP")
+      return NextResponse.json({ error: "订阅目标无效" }, { status: 400 });
+    if (targetType === "GROUP" && !isGroupId(targetIdParam))
+      return NextResponse.json({ error: "群号无效" }, { status: 400 });
+    if (targetType === "GROUP" && !session)
+      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+
     let visibilityWhere: Prisma.QuestionBankWhereInput;
     if (ownerIsMine) {
       if (!session?.user?.id) {
@@ -147,6 +155,8 @@ export async function GET(request: NextRequest) {
       }
       visibilityWhere = { OR: visibilityOr };
     }
+
+    if (targetType === "GROUP") visibilityWhere = { AND: [visibilityWhere, { visibility: "PUBLIC" }] };
 
     const where: Prisma.QuestionBankWhereInput = search
       ? { AND: [searchWhere, visibilityWhere] }

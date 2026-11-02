@@ -1,914 +1,154 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { startLogin, useSession } from "@/lib/client-auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs";
-import { toast } from "sonner";
-import { SkeletonCardGrid } from "@/components/ui/skeleton-card";
-import { Search, Clock, BookOpen, Users, CheckCircle, Bell, BookMarked } from "lucide-react";
-import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
-import { SubscriptionPanel } from "@/components/bank/subscription-panel";
-import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
-import { formatSubscriptionSchedule } from "@/lib/subscriptions/schedule";
-import { learningStatusLabels } from "@/lib/subscriptions/policy";
-import type { LearningSubscriptionMode, LearningSubscriptionStatus } from "@/types";
+import { Bell, BookMarked, BookOpenCheck, ListChecks, Users } from "lucide-react";
+import { useSession } from "@/lib/client-auth";
+import { AuthenticationState } from "@/components/authentication-state";
+import { BankExplorer } from "@/components/bank/bank-explorer";
 import { KnowledgeExplorer } from "@/components/knowledge/knowledge-explorer";
-import {
-  MAX_SUBSCRIPTIONS_PER_TARGET,
-  MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET,
-  MAX_PUSH_TIMES_PER_SUBSCRIPTION,
-  DEFAULT_PUSH_TIMES,
-} from "@/types";
+import { DigestSubscriptionList } from "@/components/dashboard/digest-subscription-list";
+import { SubscriptionPanel, type SubscriptionSummary } from "@/components/bank/subscription-panel";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { RequestState } from "@/components/ui/request-state";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GroupEntryDialog } from "./group-entry-dialog";
+import type { SubscriptionCadence, SubscriptionScheduleMode } from "@/types";
 
-/* ---------- types ---------- */
-
-interface SubscriptionItem {
-  id: string;
+interface GroupSubscription extends SubscriptionSummary {
   bankId: string;
-  pushTimes: string[];
-  isActive: boolean;
-  mode: LearningSubscriptionMode;
-  status: LearningSubscriptionStatus;
-  endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
-  repeatCount?: number;
-  currentCycle?: number;
-  subscriber?: { id: string; name: string | null; uid: string | null } | null;
+  subscriber?: { name: string | null; uid: string | null } | null;
   bank: {
-    id: string;
     title: string;
-    description: string | null;
-    subscriberCount: number;
-    subscriptionScheduleMode: "CUSTOM" | "FIXED";
-    subscriptionCadence: "DAILY" | "WEEKLY";
-    subscriptionWeekdays: number[];
-    subscriptionPushTimes: string[];
-    _count: { questions: number };
+    subscriptionScheduleMode?: SubscriptionScheduleMode;
+    subscriptionCadence?: SubscriptionCadence;
+    subscriptionWeekdays?: number[];
+    subscriptionPushTimes?: string[];
   };
-  questionCount: number;
+  questionCount?: number;
+  pointCount?: number;
   pushedCount: number;
 }
 
-interface GroupSubscriptionsResponse {
-  subscriptions: SubscriptionItem[];
-  count: number;
-  limit: number;
-}
+function useGroupSubscriptions(endpoint: string) {
+  const [subscriptions, setSubscriptions] = useState<GroupSubscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const currentRequest = useRef<AbortController | null>(null);
 
-interface KnowledgeSubscriptionItem {
-  id: string;
-  bankId: string;
-  pushTimes: string[];
-  isActive: boolean;
-  mode: LearningSubscriptionMode;
-  status: LearningSubscriptionStatus;
-  endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
-  repeatCount?: number;
-  currentCycle?: number;
-  subscriber?: { id: string; name: string | null; uid: string | null } | null;
-  bank: {
-    id: string;
-    title: string;
-    description: string | null;
-    subscriberCount: number;
-    _count: { points: number };
-  };
-  pointCount: number;
-  pushedCount: number;
-}
+  const refresh = useCallback(async () => {
+    currentRequest.current?.abort();
+    const controller = new AbortController();
+    currentRequest.current = controller;
+    setLoading(true);
+    setFailed(false);
+    try {
+      const response = await fetch(endpoint, { signal: controller.signal, cache: "no-store" });
+      if (!response.ok) throw new Error("Unavailable");
+      const data = await response.json();
+      if (!Array.isArray(data.subscriptions)) throw new Error("Invalid response");
+      if (!controller.signal.aborted) setSubscriptions(data.subscriptions);
+    } catch {
+      if (!controller.signal.aborted) setFailed(true);
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [endpoint]);
 
-interface GroupKnowledgeSubscriptionsResponse {
-  subscriptions: KnowledgeSubscriptionItem[];
-  count: number;
-  limit: number;
-}
+  useEffect(() => {
+    const timer = setTimeout(() => void refresh(), 0);
+    return () => { clearTimeout(timer); currentRequest.current?.abort(); };
+  }, [refresh]);
 
-interface Bank {
-  recommendedSubscriptionMode: LearningSubscriptionMode;
-  subscriptionScheduleMode: "CUSTOM" | "FIXED";
-  subscriptionCadence: "DAILY" | "WEEKLY";
-  subscriptionWeekdays: number[];
-  subscriptionPushTimes: string[];
-  id: string;
-  title: string;
-  description: string | null;
-  subscriberCount: number;
-  creator: { id: string; name: string | null; image: string | null; uid?: string | null };
-  _count: { questions: number };
-  isSubscribed?: boolean;
+  return { subscriptions, loading, failed, refresh };
 }
-
-interface BanksResponse {
-  banks: Bank[];
-  total: number;
-  page: number;
-  totalPages: number;
-  subscriptionCount?: number;
-}
-
-/* ========== main component ========== */
 
 export function GroupDashboard({ groupId }: { groupId: string }) {
-  const [subData, setSubData] = useState<GroupSubscriptionsResponse | null>(null);
-  const [subLoading, setSubLoading] = useState(true);
-  const [knowledgeSubData, setKnowledgeSubData] =
-    useState<GroupKnowledgeSubscriptionsResponse | null>(null);
-  const [knowledgeSubLoading, setKnowledgeSubLoading] = useState(true);
-
-  const [banksData, setBanksData] = useState<BanksResponse | null>(null);
-  const [banksLoading, setBanksLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const fetchIdRef = useRef(0);
-
-  /* --- subscriptions --- */
-  const fetchSubscriptions = useCallback(() => {
-    setSubLoading(true);
-    fetch(`/api/group/${groupId}/subscriptions`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json && Array.isArray(json.subscriptions)) {
-          setSubData(json as GroupSubscriptionsResponse);
-        } else {
-          setSubData({ subscriptions: [], count: 0, limit: MAX_SUBSCRIPTIONS_PER_TARGET });
-        }
-      })
-      .catch(() => {
-        toast.error("获取订阅列表失败");
-        setSubData({ subscriptions: [], count: 0, limit: MAX_SUBSCRIPTIONS_PER_TARGET });
-      })
-      .finally(() => setSubLoading(false));
-  }, [groupId]);
-
-  const fetchKnowledgeSubscriptions = useCallback(() => {
-    setKnowledgeSubLoading(true);
-    const params = new URLSearchParams();
-    params.set("targetType", "GROUP");
-    params.set("targetId", groupId);
-    fetch(`/api/knowledge-subscriptions?${params}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json && Array.isArray(json.subscriptions)) {
-          setKnowledgeSubData(json as GroupKnowledgeSubscriptionsResponse);
-        } else {
-          setKnowledgeSubData({
-            subscriptions: [],
-            count: 0,
-            limit: MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET,
-          });
-        }
-      })
-      .catch(() => {
-        toast.error("获取知识卡片订阅失败");
-        setKnowledgeSubData({
-          subscriptions: [],
-          count: 0,
-          limit: MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET,
-        });
-      })
-      .finally(() => setKnowledgeSubLoading(false));
-  }, [groupId]);
-
-  /* --- banks --- */
-  useEffect(() => {
-    if (search === debouncedSearch) return;
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(t);
-  }, [search, debouncedSearch]);
-
-  const fetchBanks = useCallback(() => {
-    const id = ++fetchIdRef.current;
-    setBanksLoading(true);
-    const params = new URLSearchParams();
-    if (debouncedSearch) params.set("search", debouncedSearch);
-    params.set("page", String(page));
-    params.set("targetType", "GROUP");
-    params.set("targetId", groupId);
-    fetch(`/api/banks?${params}`)
-      .then((res) => res.json())
-      .then((json: BanksResponse | { error: string }) => {
-        if (id !== fetchIdRef.current) return;
-        if ("banks" in json) {
-          setBanksData(json);
-        }
-      })
-      .catch(() => {
-        if (id === fetchIdRef.current) setBanksData(null);
-      })
-      .finally(() => {
-        if (id === fetchIdRef.current) setBanksLoading(false);
-      });
-  }, [debouncedSearch, page, groupId]);
-
-  useEffect(() => {
-    const timeout = setTimeout(fetchSubscriptions, 0);
-    return () => clearTimeout(timeout);
-  }, [fetchSubscriptions]);
-
-  useEffect(() => {
-    const timeout = setTimeout(fetchKnowledgeSubscriptions, 0);
-    return () => clearTimeout(timeout);
-  }, [fetchKnowledgeSubscriptions]);
-
-  useEffect(() => {
-    const timeout = setTimeout(fetchBanks, 0);
-    return () => clearTimeout(timeout);
-  }, [fetchBanks]);
-
-  const refreshAll = () => {
-    fetchSubscriptions();
-    fetchKnowledgeSubscriptions();
-    fetchBanks();
-  };
-
-  const handleUnsubscribe = async (subId: string) => {
-    if (!confirm("确定要取消该订阅吗？")) return;
-    try {
-      const res = await fetch(
-        `/api/group/${groupId}/subscriptions/${subId}`,
-        { method: "DELETE" }
-      );
-      if (!res.ok) {
-        const d = await res.json();
-        toast.error(d.error ?? "取消订阅失败");
-        return;
-      }
-      toast.success("已取消订阅");
-      refreshAll();
-    } catch {
-      toast.error("取消订阅失败");
-    }
-  };
-
-  const handleUnsubscribeKnowledge = async (subId: string) => {
-    if (!confirm("确定要取消该知识卡片订阅吗？")) return;
-    try {
-      const res = await fetch(`/api/knowledge-subscriptions/${subId}`, {
-        method: "DELETE",
-        headers: { "x-group-id": groupId },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error ?? "取消订阅失败");
-        return;
-      }
-      toast.success("已取消订阅");
-      refreshAll();
-    } catch {
-      toast.error("取消订阅失败");
-    }
-  };
-
-  const atLimit = (subData?.count ?? 0) >= MAX_SUBSCRIPTIONS_PER_TARGET;
-  const subCount = subData?.count ?? 0;
-  const knowledgeSubCount = knowledgeSubData?.count ?? 0;
-  const managementCount = subCount + knowledgeSubCount;
-
+  const { status } = useSession();
   return (
-    <div className="space-y-5">
-      {/* summary strip */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm shadow-sm">
-          <BookOpen className="size-3.5 text-primary/70" />
-          <span className="text-muted-foreground">题库</span>
-          <span className="font-semibold">{subCount}</span>
-          <span className="text-muted-foreground">/ {MAX_SUBSCRIPTIONS_PER_TARGET}</span>
+    <div className="page-enter space-y-6">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-2xl font-semibold">群订阅</h1>
+          <p className="flex min-w-0 items-start gap-2 text-sm text-muted-foreground">
+            <Users className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span className="max-w-[64ch] break-all">接收群：<span className="font-medium text-foreground">{groupId}</span></span>
+          </p>
         </div>
-        <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm shadow-sm">
-          <BookMarked className="size-3.5 text-primary/70" />
-          <span className="text-muted-foreground">知识卡片</span>
-          <span className="font-semibold">{knowledgeSubCount}</span>
-          <span className="text-muted-foreground">/ {MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET}</span>
-        </div>
-        {banksData && (
-          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm shadow-sm">
-            <Users className="size-3.5 text-primary/70" />
-            <span className="text-muted-foreground">可用练习</span>
-            <span className="font-semibold">{banksData.total}</span>
-          </div>
-        )}
-        <div className="ml-auto text-xs text-muted-foreground">
-          群组 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{groupId}</code>
-        </div>
-      </div>
+        <GroupEntryDialog groupId={groupId} />
+      </header>
+      {status === "authenticated" ? <GroupContent key={groupId} groupId={groupId} /> : <AuthenticationState />}
+    </div>
+  );
+}
 
-      {/* tabs */}
+function GroupContent({ groupId }: { groupId: string }) {
+  const { data: session } = useSession();
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">仅展示可推送到群的公开内容，个人订阅不受影响。</p>
       <Tabs defaultValue="banks">
-        <TabsList className="grid h-10 w-full grid-cols-4 gap-1 p-1">
-          <TabsTrigger value="banks" className="h-8 min-w-0 gap-1.5 px-2">
-            <BookOpen className="size-3.5" />
-            答题练习
-          </TabsTrigger>
-          <TabsTrigger value="subscriptions" className="h-8 min-w-0 gap-1.5 px-2">
-            <CheckCircle className="size-3.5" />
-            订阅管理
-            {managementCount > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 min-w-5 rounded-full px-1.5 text-[10px] font-semibold">
-                {managementCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="digests" className="h-8 min-w-0 gap-1.5 px-2">
-            <Bell className="size-3.5" />
-            资讯摘要
-          </TabsTrigger>
-          <TabsTrigger value="knowledge" className="h-8 min-w-0 gap-1.5 px-2">
-            知识卡片
-          </TabsTrigger>
+        <TabsList variant="line" className="h-11 gap-5">
+          <TabsTrigger value="banks"><BookOpenCheck className="size-4" aria-hidden />题库</TabsTrigger>
+          <TabsTrigger value="knowledge"><BookMarked className="size-4" aria-hidden />知识卡片</TabsTrigger>
+          <TabsTrigger value="digests"><Bell className="size-4" aria-hidden />资讯与热榜</TabsTrigger>
+          <TabsTrigger value="subscriptions"><ListChecks className="size-4" aria-hidden />{session?.user.isAdmin ? "群订阅管理" : "我创建的订阅"}</TabsTrigger>
         </TabsList>
-
-        {/* ---------- tab: 答题练习 ---------- */}
         <TabsContent value="banks" className="pt-4">
-          <BanksTab
-            banksData={banksData}
-            banksLoading={banksLoading}
-            search={search}
-            setSearch={(v) => { setSearch(v); setPage(1); }}
-            page={page}
-            setPage={setPage}
-            groupId={groupId}
-            atLimit={atLimit}
-            subData={subData}
-            onSubscribed={refreshAll}
-          />
-        </TabsContent>
-
-        {/* ---------- tab: 订阅管理 ---------- */}
-        <TabsContent value="subscriptions" className="pt-4">
-          <SubscriptionManagementTab
-            subData={subData}
-            subLoading={subLoading}
-            knowledgeSubData={knowledgeSubData}
-            knowledgeSubLoading={knowledgeSubLoading}
-            groupId={groupId}
-            onUnsubscribe={handleUnsubscribe}
-            onUnsubscribeKnowledge={handleUnsubscribeKnowledge}
-            onUpdate={refreshAll}
-          />
-        </TabsContent>
-
-        {/* ---------- tab: 资讯摘要 ---------- */}
-        <TabsContent value="digests" className="pt-4">
-          <DigestSubscriptionList
-            targetType="GROUP"
-            targetId={groupId}
-            title="群资讯摘要"
-            description="给这个群订阅 GitHub Trending、AI 新闻和 arXiv 论文摘要。"
-          />
+          <BankExplorer targetType="GROUP" targetId={groupId} showCreate={false} layout="list" />
         </TabsContent>
         <TabsContent value="knowledge" className="pt-4">
-          <KnowledgeExplorer
-            targetType="GROUP"
-            targetId={groupId}
-            showCreate={false}
-            onSubscribed={refreshAll}
-          />
+          <KnowledgeExplorer targetType="GROUP" targetId={groupId} showCreate={false} layout="list" />
+        </TabsContent>
+        <TabsContent value="digests" className="pt-4">
+          <DigestSubscriptionList targetType="GROUP" targetId={groupId} title="本群每日精选" />
+        </TabsContent>
+        <TabsContent value="subscriptions" className="space-y-6 pt-4">
+          <GroupSubscriptionsSection groupId={groupId} kind="QUESTION" />
+          <GroupSubscriptionsSection groupId={groupId} kind="KNOWLEDGE" />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-/* ========== Tab 1: 答题练习 ========== */
-
-function BanksTab({
-  banksData,
-  banksLoading,
-  search,
-  setSearch,
-  page,
-  setPage,
-  groupId,
-  atLimit,
-  subData,
-  onSubscribed,
-}: {
-  banksData: BanksResponse | null;
-  banksLoading: boolean;
-  search: string;
-  setSearch: (v: string) => void;
-  page: number;
-  setPage: (p: number | ((prev: number) => number)) => void;
-  groupId: string;
-  atLimit: boolean;
-  subData: GroupSubscriptionsResponse | null;
-  onSubscribed: () => void;
-}) {
-  const subscribedMap = new Map(
-    subData?.subscriptions.map((s) => [s.bankId, s]) ?? []
-  );
+function GroupSubscriptionsSection({ groupId, kind }: { groupId: string; kind: "QUESTION" | "KNOWLEDGE" }) {
+  const isQuestion = kind === "QUESTION";
+  const endpoint = isQuestion
+    ? `/api/group/${groupId}/subscriptions`
+    : `/api/knowledge-subscriptions?${new URLSearchParams({ targetType: "GROUP", targetId: groupId })}`;
+  const { subscriptions, loading, failed, refresh } = useGroupSubscriptions(endpoint);
+  const label = isQuestion ? "题库" : "知识卡片";
 
   return (
-    <div className="space-y-4">
-      <div className="relative w-full max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="搜索题库..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-9 rounded-xl border-border/80 bg-card pl-10 pr-3 shadow-[0_3px_10px_rgba(44,48,54,0.05)] focus-visible:ring-primary/25"
-        />
-      </div>
-
-      {banksLoading ? (
-        <SkeletonCardGrid />
-      ) : banksData?.banks.length ? (
-        <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {banksData.banks.map((bank, index) => {
-              const sub = subscribedMap.get(bank.id);
-              return (
-                <GroupBankCard
-                  key={bank.id}
-                  bank={bank}
-                  subscription={sub ?? null}
-                  groupId={groupId}
-                  atLimit={atLimit}
-                  index={index}
-                  onSubscribed={onSubscribed}
-                />
-              );
-            })}
-          </div>
-
-          {banksData.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p: number) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-              >
-                上一页
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page} / {banksData.totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p: number) => Math.min(banksData.totalPages, p + 1))}
-                disabled={page >= banksData.totalPages}
-              >
-                下一页
-              </Button>
-            </div>
-          )}
-        </>
-      ) : search ? (
-        <EmptyState
-          title="未找到相关题库"
-          description="尝试其他关键词，或创建新的题库"
-        />
-      ) : (
-        <EmptyState
-          title="尚无题库"
-          description="暂时还没有可用的题库"
-          illustration="book"
-        />
-      )}
-    </div>
-  );
-}
-
-/* --- bank card with inline subscription status --- */
-
-function GroupBankCard({
-  bank,
-  subscription,
-  groupId,
-  atLimit,
-  index,
-  onSubscribed,
-}: {
-  bank: Bank;
-  subscription: SubscriptionItem | null;
-  groupId: string;
-  atLimit: boolean;
-  index: number;
-  onSubscribed: () => void;
-}) {
-  const { data: session, status: sessionStatus } = useSession();
-  const isSubscribed = !!subscription && subscription.status !== "COMPLETED" && subscription.status !== "CANCELLED";
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
-  const [newTime, setNewTime] = useState("");
-  const [subscribing, setSubscribing] = useState(false);
-  const [mode, setMode] = useState(bank.recommendedSubscriptionMode);
-  const [endCondition, setEndCondition] = useState<"END_AFTER_COMPLETE" | "REPEAT_N_TIMES">("END_AFTER_COMPLETE");
-  const [repeatCount, setRepeatCount] = useState(0);
-  const fixedSchedule = bank.subscriptionScheduleMode === "FIXED";
-
-  const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
-
-  const addTime = () => {
-    const val = newTime.trim();
-    if (!val || !/^\d{2}:\d{2}$/.test(val)) {
-      toast.error("请输入有效的 HH:MM 格式时间");
-      return;
-    }
-    if (pushTimes.includes(val)) {
-      toast.error("该时间已存在");
-      return;
-    }
-    setPushTimes((prev) => [...prev, val].sort());
-    setNewTime("");
-  };
-
-  const removeTime = (t: string) =>
-    setPushTimes((prev) => prev.filter((x) => x !== t));
-
-  const handleSubscribe = async () => {
-    if (!fixedSchedule && pushTimes.length === 0) {
-      toast.error("请至少添加一个推送时间");
-      return;
-    }
-    setSubscribing(true);
-    try {
-      const res = await fetch(`/api/group/${groupId}/subscriptions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankId: bank.id, mode, endCondition, repeatCount, ...(bank.subscriptionScheduleMode === "FIXED" ? {} : { pushTimes }) }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        toast.error(d.error ?? "订阅失败");
-        return;
-      }
-      toast.success(`已订阅「${bank.title}」`);
-      setDialogOpen(false);
-      onSubscribed();
-    } catch {
-      toast.error("订阅失败，请稍后重试");
-    } finally {
-      setSubscribing(false);
-    }
-  };
-
-  return (
-    <Card
-      className="paper-rise card-hover flex flex-col"
-      style={{ animationDelay: `${index * 60}ms` }}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <Link href={`/bank/${bank.id}`} className="min-w-0 hover:underline">
-            <CardTitle className="truncate text-base font-semibold" title={bank.title}>
-              {bank.title}
-            </CardTitle>
-          </Link>
-          {isSubscribed && (
-            <Badge className="shrink-0 border-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              {subscription ? learningStatusLabels[subscription.status] : "已订阅"}
-            </Badge>
-          )}
+    <section className="space-y-3" aria-label={`${label}群订阅`}>
+      <h2 className="text-base font-semibold">{label}</h2>
+      {loading ? <RequestState title={`正在加载${label}订阅`} loading /> : failed ? (
+        <RequestState title={`${label}订阅暂时加载失败`} onRetry={() => void refresh()} />
+      ) : subscriptions.length ? (
+        <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {subscriptions.map((sub) => (
+            <Card key={sub.id}>
+              <CardHeader>
+                <CardTitle className="break-words text-base leading-6"><Link href={`/${isQuestion ? "bank" : "knowledge"}/${sub.bankId}`} className="hover:underline">{sub.bank.title}</Link></CardTitle>
+                <p className="break-words text-xs text-muted-foreground">订阅人：{sub.subscriber?.name || sub.subscriber?.uid || "未记录"}{sub.subscriber?.name && sub.subscriber.uid ? ` · ${sub.subscriber.uid}` : ""}</p>
+              </CardHeader>
+              <CardContent>
+                <SubscriptionPanel framed={false} kind={kind} bankId={sub.bankId} targetType="GROUP" targetId={groupId}
+                  bankSchedule={{
+                    subscriptionScheduleMode: sub.bank.subscriptionScheduleMode ?? "CUSTOM",
+                    subscriptionCadence: sub.bank.subscriptionCadence ?? "DAILY",
+                    subscriptionWeekdays: sub.bank.subscriptionWeekdays ?? [],
+                    subscriptionPushTimes: sub.bank.subscriptionPushTimes ?? [],
+                  }}
+                  initialSubscription={sub} totalQuestions={(isQuestion ? sub.questionCount : sub.pointCount) ?? 0}
+                  pushedCount={sub.pushedCount} onChanged={() => void refresh()} />
+              </CardContent>
+            </Card>
+          ))}
         </div>
-        {bank.description && (
-          <p className="line-clamp-2 text-xs text-muted-foreground">{bank.description}</p>
-        )}
-      </CardHeader>
-
-      <CardContent className="flex flex-1 flex-col justify-between gap-3 pt-0">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{bank._count.questions} 题</span>
-          <span>{bank.subscriberCount} 人订阅过</span>
-          {bank.creator.name && (
-            <span>
-              by {bank.creator.name}
-              {bank.creator.uid ? ` (${bank.creator.uid})` : ""}
-            </span>
-          )}
-        </div>
-
-        {/* subscribed → show push times inline */}
-        {isSubscribed && subscription && (
-          <div className="flex flex-wrap gap-1">
-            {subscription.pushTimes.map((t) => (
-              <span
-                key={t}
-                className="inline-flex items-center gap-1 rounded-md bg-primary/8 px-1.5 py-0.5 text-[11px] font-medium text-primary"
-              >
-                <Clock className="size-2.5" />
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* actions */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            render={<Link href={`/bank/${bank.id}`} />}
-            nativeButton={false}
-          >
-            查看详情
-          </Button>
-
-          {!isSubscribed && !atLimit && sessionStatus === "loading" && (
-            <Button variant="default" size="sm" className="h-7 text-xs" disabled>
-              订阅
-            </Button>
-          )}
-
-          {!isSubscribed && !atLimit && session?.user && (
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground h-7 hover:bg-primary/80 transition-colors">
-                订阅
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>订阅「{bank.title}」</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount} onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={subscribing} />
-                  {fixedSchedule ? <p className="text-sm text-muted-foreground">{formatSubscriptionSchedule(bank)}</p> : <>
-                  <div className="space-y-2">
-                    <Label>每日推送时间</Label>
-                    <p className="text-xs text-muted-foreground">
-                      最多 {MAX_PUSH_TIMES_PER_SUBSCRIPTION} 个时间点，点击已有时间可删除
-                    </p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="time"
-                        value={newTime}
-                        onChange={(e) => setNewTime(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={addTime}
-                        disabled={atTimeLimit}
-                      >
-                        添加
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {pushTimes.map((t) => (
-                      <Badge
-                        key={t}
-                        className="cursor-pointer bg-primary/10 text-primary hover:bg-primary/20"
-                        onClick={() => removeTime(t)}
-                      >
-                        {t} ×
-                      </Badge>
-                    ))}
-                  </div>
-                  {pushTimes.length === 0 && (
-                    <p className="text-xs text-muted-foreground">点击「添加」设定推送时间</p>
-                  )}
-                  </>}
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={subscribing}>
-                    取消
-                  </Button>
-                  <Button onClick={handleSubscribe} disabled={subscribing}>
-                    {subscribing ? "订阅中..." : "确认订阅"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          {!isSubscribed && !atLimit && sessionStatus !== "loading" && !session?.user && (
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                toast.info("请先登录");
-                startLogin();
-              }}
-            >
-              订阅
-            </Button>
-          )}
-
-          {!isSubscribed && atLimit && (
-            <Badge variant="secondary" className="text-[10px] text-muted-foreground">
-              订阅已满
-            </Badge>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      ) : <EmptyState title={`暂无可管理的${label}订阅`} description="在对应栏目订阅后，可在这里管理推送。" variant="compact" />}
+    </section>
   );
-}
-
-/* ========== Tab 2: 订阅管理 ========== */
-
-function SubscriptionManagementTab({
-  subData,
-  subLoading,
-  knowledgeSubData,
-  knowledgeSubLoading,
-  groupId,
-  onUnsubscribe,
-  onUnsubscribeKnowledge,
-  onUpdate,
-}: {
-  subData: GroupSubscriptionsResponse | null;
-  subLoading: boolean;
-  knowledgeSubData: GroupKnowledgeSubscriptionsResponse | null;
-  knowledgeSubLoading: boolean;
-  groupId: string;
-  onUnsubscribe: (id: string) => void;
-  onUnsubscribeKnowledge: (id: string) => void;
-  onUpdate: () => void;
-}) {
-  return (
-    <div className="space-y-6">
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold">题库</h3>
-          <Badge variant="outline">
-            {subData?.count ?? 0} / {subData?.limit ?? MAX_SUBSCRIPTIONS_PER_TARGET}
-          </Badge>
-        </div>
-        <QuestionSubscriptionsSection
-          subData={subData}
-          subLoading={subLoading}
-          groupId={groupId}
-          onUnsubscribe={onUnsubscribe}
-          onUpdate={onUpdate}
-        />
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold">知识卡片</h3>
-          <Badge variant="outline">
-            {knowledgeSubData?.count ?? 0} /{" "}
-            {knowledgeSubData?.limit ?? MAX_KNOWLEDGE_SUBSCRIPTIONS_PER_TARGET}
-          </Badge>
-        </div>
-        <KnowledgeSubscriptionsTab
-          knowledgeSubData={knowledgeSubData}
-          knowledgeSubLoading={knowledgeSubLoading}
-          groupId={groupId}
-          onUnsubscribe={onUnsubscribeKnowledge}
-          onUpdate={onUpdate}
-        />
-      </section>
-    </div>
-  );
-}
-
-function QuestionSubscriptionsSection({
-  subData,
-  subLoading,
-  groupId,
-  onUnsubscribe,
-  onUpdate,
-}: {
-  subData: GroupSubscriptionsResponse | null;
-  subLoading: boolean;
-  groupId: string;
-  onUnsubscribe: (id: string) => void;
-  onUpdate: () => void;
-}) {
-  if (subLoading) {
-    return (
-      <div className="space-y-4">
-        {[1, 2].map((i) => (
-          <Card key={i} className="animate-pulse">
-            <CardContent className="pt-6">
-              <div className="h-5 w-48 rounded bg-muted" />
-              <div className="mt-2 h-4 w-full rounded bg-muted" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  if (!subData?.subscriptions.length) {
-    return (
-      <EmptyState
-        title="暂无订阅"
-        description="前往「答题练习」浏览并订阅题库"
-        illustration="book"
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {subData.subscriptions.map((sub, index) => (
-        <GroupSubscriptionCard
-          key={sub.id}
-          sub={sub}
-          groupId={groupId}
-          index={index}
-          onUnsubscribe={() => onUnsubscribe(sub.id)}
-          onUpdate={onUpdate}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* --- subscription management card (kept from original) --- */
-
-function GroupSubscriptionCard({ sub, groupId, index, onUpdate }: {
-  sub: SubscriptionItem; groupId: string; index: number; onUnsubscribe: () => void; onUpdate: () => void;
-}) {
-  return <Card className="paper-rise" style={{ animationDelay: `${index * 70}ms` }}>
-    <CardHeader><CardTitle><Link href={`/bank/${sub.bankId}`}>{sub.bank.title}</Link></CardTitle>
-      <p className="text-xs text-muted-foreground">订阅人：{sub.subscriber?.name}{sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}</p></CardHeader>
-    <CardContent><SubscriptionPanel framed={false} bankId={sub.bankId} targetType="GROUP" targetId={groupId}
-      bankSchedule={sub.bank} initialSubscription={sub} totalQuestions={sub.questionCount} pushedCount={sub.pushedCount} onChanged={onUpdate} /></CardContent>
-  </Card>;
-}
-
-function KnowledgeSubscriptionsTab({
-  knowledgeSubData,
-  knowledgeSubLoading,
-  groupId,
-  onUnsubscribe,
-  onUpdate,
-}: {
-  knowledgeSubData: GroupKnowledgeSubscriptionsResponse | null;
-  knowledgeSubLoading: boolean;
-  groupId: string;
-  onUnsubscribe: (id: string) => void;
-  onUpdate: () => void;
-}) {
-  if (knowledgeSubLoading) {
-    return (
-      <div className="space-y-4">
-        {[1, 2].map((i) => (
-          <Card key={i} className="animate-pulse">
-            <CardContent className="pt-6">
-              <div className="h-5 w-48 rounded bg-muted" />
-              <div className="mt-2 h-4 w-full rounded bg-muted" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  if (!knowledgeSubData?.subscriptions.length) {
-    return (
-      <EmptyState
-        title="暂无知识卡片订阅"
-        description="前往「知识卡片」浏览并订阅知识库"
-        illustration="book"
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {knowledgeSubData.subscriptions.map((sub, index) => (
-        <GroupKnowledgeSubscriptionCard
-          key={sub.id}
-          sub={sub}
-          groupId={groupId}
-          index={index}
-          onUnsubscribe={() => onUnsubscribe(sub.id)}
-          onUpdate={onUpdate}
-        />
-      ))}
-    </div>
-  );
-}
-
-function GroupKnowledgeSubscriptionCard({ sub, groupId, index, onUpdate }: {
-  sub: KnowledgeSubscriptionItem; groupId: string; index: number; onUnsubscribe: () => void; onUpdate: () => void;
-}) {
-  return <Card className="paper-rise" style={{ animationDelay: `${index * 70}ms` }}>
-    <CardHeader><CardTitle><Link href={`/knowledge/${sub.bankId}`}>{sub.bank.title}</Link></CardTitle>
-      <p className="text-xs text-muted-foreground">订阅人：{sub.subscriber?.name}{sub.subscriber?.uid ? ` (${sub.subscriber.uid})` : ""}</p></CardHeader>
-    <CardContent><SubscriptionPanel framed={false} kind="KNOWLEDGE" bankId={sub.bankId} targetType="GROUP" targetId={groupId}
-      bankSchedule={{ subscriptionScheduleMode: "CUSTOM", subscriptionCadence: "DAILY", subscriptionWeekdays: [], subscriptionPushTimes: [] }}
-      initialSubscription={sub} totalQuestions={sub.pointCount} pushedCount={sub.pushedCount} onChanged={onUpdate} /></CardContent>
-  </Card>;
 }

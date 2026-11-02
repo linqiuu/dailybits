@@ -52,6 +52,45 @@ async function fixture(latest = true) {
   };
 }
 
+test("group subscriptions isolate recipients, preserve ownership and reject restricted content", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const f = await fixture();
+  try {
+    const user = await f.db.user.create({ data: { uid: "group-owner" } });
+    const other = await f.db.user.create({ data: { uid: "group-other" } });
+    const actor = { id: user.id, departmentIds: ["test-department"] };
+    const outsider = { id: other.id, departmentIds: [] };
+    const bank = await f.db.questionBank.create({ data: { title: "Group fixture", creatorId: user.id, visibility: "PUBLIC" } });
+    const body = { bankId: bank.id, mode: "FOLLOW_UPDATES", pushTimes: ["10:00"] };
+    const personal = await createLearningSubscription(f.db, "QUESTION", actor, body);
+    const group = await createLearningSubscription(f.db, "QUESTION", actor, { ...body, targetType: "GROUP", targetId: "00123456" });
+    const second = await createLearningSubscription(f.db, "QUESTION", actor, { ...body, targetType: "GROUP", targetId: "90071992547409931234" });
+    assert.equal(group.targetId, "00123456");
+    assert.equal(group.targetType, "GROUP");
+    assert.equal(group.subscriberId, user.id);
+    assert.notEqual(group.id, personal.id);
+    assert.notEqual(group.id, second.id);
+    await assert.rejects(createLearningSubscription(f.db, "QUESTION", actor, { ...body, targetType: "GROUP", targetId: group.targetId }), { status: 409 });
+    await assert.rejects(updateLearningSubscription(f.db, "QUESTION", group.id, outsider, { action: "pause" }, group.targetId), { status: 403 });
+    await assert.rejects(updateLearningSubscription(f.db, "QUESTION", group.id, actor, { action: "pause" }, second.targetId), { status: 403 });
+    await updateLearningSubscription(f.db, "QUESTION", group.id, actor, { action: "pause" }, group.targetId);
+    assert.equal((await f.db.subscription.findUniqueOrThrow({ where: { id: personal.id } })).status, personal.status);
+    await updateLearningSubscription(f.db, "QUESTION", group.id, actor, { action: "cancel" }, group.targetId);
+    assert.equal((await f.db.subscription.findUniqueOrThrow({ where: { id: second.id } })).status, second.status);
+
+    const privateBank = await f.db.questionBank.create({ data: { title: "Private fixture", creatorId: user.id, visibility: "PRIVATE" } });
+    await assert.rejects(createLearningSubscription(f.db, "QUESTION", actor, { ...body, bankId: privateBank.id, targetType: "GROUP", targetId: "123456" }), { status: 403 });
+    const knowledge = await f.db.knowledgeBank.create({ data: { title: "Department fixture", creatorId: user.id, visibility: "PARTIAL", visibleDepartments: ["test-department"] } });
+    await assert.rejects(createLearningSubscription(f.db, "KNOWLEDGE", actor, { ...body, bankId: knowledge.id, targetType: "GROUP", targetId: "123456" }), { status: 403 });
+    await f.db.knowledgeBank.update({ where: { id: knowledge.id }, data: { visibility: "PUBLIC" } });
+    const knowledgeGroup = await createLearningSubscription(f.db, "KNOWLEDGE", actor, { ...body, bankId: knowledge.id, targetType: "GROUP", targetId: "123456" });
+    assert.equal(knowledgeGroup.targetType, "GROUP");
+    assert.equal(knowledgeGroup.subscriberId, user.id);
+    await assert.rejects(createLearningSubscription(f.db, "KNOWLEDGE", actor, { ...body, bankId: knowledge.id, targetType: "GROUP", targetId: "not-a-group" }), { status: 400 });
+  } finally {
+    await f.close();
+  }
+});
+
 test(
   "legacy migration freezes active editions and never revives inactive subscriptions",
   { skip: !process.env.TEST_DATABASE_URL },

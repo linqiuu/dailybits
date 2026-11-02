@@ -3,6 +3,7 @@ import { getCurrentSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateLearningSubscription } from "@/lib/subscriptions/service";
 import { SubscriptionPolicyError } from "@/lib/subscriptions/policy";
+import { isGroupId } from "@/lib/groups/identity";
 type Context = { params: Promise<{ groupId: string; id: string }> };
 async function update(request: NextRequest, context: Context, cancel: boolean) {
   try {
@@ -10,7 +11,7 @@ async function update(request: NextRequest, context: Context, cancel: boolean) {
     if (!session)
       return NextResponse.json({ error: "请先登录" }, { status: 401 });
     const { groupId, id } = await context.params;
-    if (!/^\d+$/.test(groupId))
+    if (!isGroupId(groupId))
       return NextResponse.json({ error: "群号无效" }, { status: 400 });
     const body = cancel ? { action: "cancel" } : await request.json();
     if (!body || typeof body !== "object" || Array.isArray(body))

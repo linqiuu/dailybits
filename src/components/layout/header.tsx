@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/sheet";
 import { signOut, startLogin, useSession } from "@/lib/client-auth";
 import { cn } from "@/lib/utils";
+import { GroupEntryDialog } from "@/components/group/group-entry-dialog";
 
 const navLinks = [
   { href: "/", label: "发现", icon: Compass },
@@ -87,6 +88,7 @@ export function Header() {
               </Link>
             );
           })}
+          <GroupEntryDialog active={pathname.startsWith("/group/")} className="route-tab h-9 gap-2 px-3 text-sm font-medium" />
           <Link
             href="https://github.com/linqiuu/dailybits"
             target="_blank"
@@ -181,6 +183,7 @@ export function Header() {
                   </Link>
                 );
               })}
+              <GroupEntryDialog active={pathname.startsWith("/group/")} className="h-10 justify-start px-3" onEntered={() => setOpen(false)} />
               <div className="my-3 border-t border-border" />
               {user ? (
                 <>

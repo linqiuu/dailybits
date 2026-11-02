@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizeSubscriptionActor } from "@/lib/subscriptions/authorization";
 import { MAX_PUSH_TIMES_PER_SUBSCRIPTION } from "@/types";
+import { isGroupId } from "@/lib/groups/identity";
 
 type RouteContext = { params: Promise<{ groupId: string; id: string }> };
 
@@ -37,6 +38,7 @@ function parsePushTimes(value: unknown): string[] | NextResponse {
 }
 
 async function findGroupDigestSubscription(id: string, groupId: string) {
+  if (!isGroupId(groupId)) return { error: "群号无效", status: 400, subscription: null };
   const subscription = await prisma.digestSubscription.findUnique({
     where: { id },
   });

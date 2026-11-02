@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useState } from "react";
 import { BookMarked, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { isGroupId } from "@/lib/groups/identity";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LearningCatalogCard } from "@/components/ui/learning-catalog-card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -81,6 +83,10 @@ export function KnowledgeCard({
   };
 
   const handleSubscribe = async () => {
+    if (targetType === "GROUP" && !isGroupId(targetId)) {
+      toast.error("群号无效，请重新选择接收群");
+      return;
+    }
     if (pushTimes.length === 0) {
       toast.error("请至少添加一个推送时间");
       return;
@@ -97,7 +103,7 @@ export function KnowledgeCard({
         toast.error(data.error ?? "订阅失败");
         return;
       }
-      toast.success("订阅成功，将按设定时间推送知识卡片");
+      toast.success(targetType === "GROUP" ? `已订阅到群 ${targetId}` : "订阅成功，将按设定时间推送知识卡片");
       setSubscribed(true);
       setSubCount((count) => count + 1);
       setOpen(false);
@@ -132,11 +138,12 @@ export function KnowledgeCard({
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger render={<Button className="h-9 gap-1.5 px-3" />}>
                 <Plus className="size-3.5" aria-hidden />
-                订阅
+                {targetType === "GROUP" ? "订阅到群" : "订阅"}
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>订阅「{title}」</DialogTitle>
+                  {targetType === "GROUP" ? <DialogDescription className="break-all">接收群：{targetId}</DialogDescription> : null}
                 </DialogHeader>
                 <div className="space-y-4">
                   <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={loading} />
@@ -183,7 +190,7 @@ export function KnowledgeCard({
                     取消
                   </Button>
                   <Button onClick={handleSubscribe} disabled={loading}>
-                    {loading ? "订阅中..." : "确认订阅"}
+                    {loading ? "订阅中..." : targetType === "GROUP" ? "确认订阅到群" : "确认订阅"}
                   </Button>
                 </DialogFooter>
               </DialogContent>

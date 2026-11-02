@@ -1,5 +1,6 @@
 import { parseLearningMode, SubscriptionPolicyError } from "@/lib/subscriptions/policy";
 import { NextRequest, NextResponse } from "next/server";
+import { isGroupId } from "@/lib/groups/identity";
 import { getCurrentSession, getSessionDepartmentKeys, type AppSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
@@ -91,6 +92,13 @@ export async function GET(request: NextRequest) {
     const targetIdParam = searchParams.get("targetId");
     const session = await getCurrentSession();
 
+    if (targetType !== "USER" && targetType !== "GROUP")
+      return NextResponse.json({ error: "订阅目标无效" }, { status: 400 });
+    if (targetType === "GROUP" && !isGroupId(targetIdParam))
+      return NextResponse.json({ error: "群号无效" }, { status: 400 });
+    if (targetType === "GROUP" && !session)
+      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+
     const searchWhere: Prisma.KnowledgeBankWhereInput = search
       ? {
           OR: [
@@ -111,6 +119,8 @@ export async function GET(request: NextRequest) {
     } else {
       visibilityWhere = await getVisibilityWhere(session);
     }
+    if (targetType === "GROUP") visibilityWhere = { AND: [visibilityWhere, { visibility: "PUBLIC" }] };
+
     const where: Prisma.KnowledgeBankWhereInput = search
       ? { AND: [searchWhere, visibilityWhere] }
       : visibilityWhere;

@@ -144,7 +144,7 @@ export function KnowledgeExplorer({
                   subscriptionCount={data.subscriptionCount ?? 0}
                   targetType={targetType}
                   targetId={targetId}
-                  onSubscribed={onSubscribed}
+                  onSubscribed={() => { fetchBanks(); onSubscribed?.(); }}
                 />
               </div>
             ))}
@@ -182,9 +182,9 @@ export function KnowledgeExplorer({
         />
       ) : (
         <EmptyState
-          title="尚无知识库"
-          description="创建一个知识库，把长文本整理成每日可推送的知识卡片。"
-          action={{ label: "创建知识库", href: "/knowledge/new" }}
+          title={targetType === "GROUP" ? "暂无可供群订阅的公开知识库" : "尚无知识库"}
+          description={targetType === "GROUP" ? "公开知识库发布后会显示在这里。" : "创建一个知识库，把长文本整理成每日可推送的知识卡片。"}
+          action={showCreate ? { label: "创建知识库", href: "/knowledge/new" } : undefined}
           variant={emptyVariant}
         />
       )}
