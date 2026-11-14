@@ -96,12 +96,12 @@ interface AihotSelectedResponse {
 }
 
 const DEFAULT_AI_NEWS_FEEDS = [
-  "https://aihot.virxact.com/feed.xml",
+  "https://aihot.news/feed.xml",
   "https://openai.com/news/rss.xml",
   "https://news.mit.edu/rss/topic/artificial-intelligence2",
 ];
 const DEFAULT_ARXIV_AI_CATEGORIES = ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "stat.ML"];
-const DEFAULT_AIHOT_API_BASE_URL = "https://aihot.virxact.com";
+const DEFAULT_AIHOT_API_BASE_URL = "https://aihot.news";
 const DEFAULT_AIHOT_DAILY_READY_TIME = "08:10";
 const DEFAULT_AIHOT_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36";
