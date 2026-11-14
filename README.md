@@ -243,7 +243,7 @@ cp .env.example .env
 
 默认 `AI_NEWS_PROVIDER=aihot`、`AIHOT_DIGEST_MODE=daily`，每天固定推送时会读取 AIHOT v1 日报接口 `/api/v1/dailies/{YYYY-MM-DD}`；如果当天日报还没到 `AIHOT_DAILY_READY_TIME`，会自动使用上一期日报日期，避免推送空内容。
 
-AIHOT 的旧 `/api/public/*` 外部接口已发布停服计划，本项目只使用 `/api/v1/*`。`AIHOT_DIGEST_MODE=selected` 可切换为 `/api/v1/items?mode=selected`，默认窗口为 `AIHOT_ITEMS_WINDOW=24h`、时间口径为 `AIHOT_ITEMS_BY=timeline`。
+AIHOT 的旧 `/api/public/*` 外部接口已停服，本项目默认连接 `https://aihot.news` 的 `/api/v1/*`。`AIHOT_DIGEST_MODE=selected` 可切换为 `/api/v1/items?mode=selected`，默认窗口为 `AIHOT_ITEMS_WINDOW=24h`、时间口径为 `AIHOT_ITEMS_BY=timeline`。
 
 AIHOT 获取失败时会先走 `AI_NEWS_RSS_FEEDS` 的兜底源，默认优先使用 AIHOT 精选 RSS，再尝试 OpenAI、MIT 和 Hacker News。定时任务只会记录日志或跳过本轮，不会把接口错误当作新闻内容推给用户。
 
