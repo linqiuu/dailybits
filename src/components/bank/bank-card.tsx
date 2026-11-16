@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubscriptionPolicyFields } from "./subscription-policy-fields";
-import type { LearningSubscriptionMode } from "@/types";
+import type { LearningSubscriptionMode, SubscriptionPushOrder } from "@/types";
 import { toast } from "sonner";
 import { isGroupId } from "@/lib/groups/identity";
 import {
@@ -89,6 +89,7 @@ export function BankCard({
   );
   const [repeatCount, setRepeatCount] = useState(0);
   const [mode, setMode] = useState(recommendedSubscriptionMode);
+  const [pushOrder, setPushOrder] = useState<SubscriptionPushOrder>("SEQUENTIAL");
 
   const atSubLimit = subscriptionCount >= MAX_SUBSCRIPTIONS_PER_TARGET;
   const atTimeLimit = pushTimes.length >= MAX_PUSH_TIMES_PER_SUBSCRIPTION;
@@ -135,6 +136,7 @@ export function BankCard({
           bankId: id,
           ...(!fixedSchedule ? { pushTimes } : {}),
           mode,
+          pushOrder,
           endCondition,
           repeatCount: endCondition === "REPEAT_N_TIMES" ? repeatCount : 0,
         }),
@@ -187,7 +189,7 @@ export function BankCard({
                   {targetType === "GROUP" ? <DialogDescription className="break-all">接收群：{targetId}</DialogDescription> : null}
                 </DialogHeader>
                 <div className="space-y-4">
-                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} endCondition={endCondition} repeatCount={repeatCount}
+                  <SubscriptionPolicyFields mode={mode} onModeChange={setMode} pushOrder={pushOrder} onPushOrderChange={setPushOrder} endCondition={endCondition} repeatCount={repeatCount}
                     onReviewChange={(end, count) => { setEndCondition(end); setRepeatCount(count); }} disabled={loading} />
                   {!fixedSchedule && <>
                     <div className="space-y-2">

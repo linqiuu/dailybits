@@ -160,6 +160,11 @@ enum EndCondition {
   REPEAT_N_TIMES
 }
 
+enum SubscriptionPushOrder {
+  SEQUENTIAL
+  RANDOM
+}
+
 enum DigestType {
   GITHUB_TRENDING
   AI_NEWS
@@ -174,6 +179,7 @@ model Subscription {
   pushTimes    String[]     @default(["09:30", "14:00", "17:00"])
   isActive     Boolean      @default(true)
   mode         LearningSubscriptionMode @default(CURRENT_EDITION)
+  pushOrder    SubscriptionPushOrder @default(SEQUENTIAL)
   status       LearningSubscriptionStatus @default(ACTIVE)
   editionQuestionIds String[] @default([])
   startedAt    DateTime     @default(now())
@@ -216,6 +222,7 @@ model KnowledgeSubscription {
   pushTimes    String[]           @default(["09:30", "14:00", "17:00"])
   isActive     Boolean            @default(true)
   mode         LearningSubscriptionMode @default(FOLLOW_UPDATES)
+  pushOrder    SubscriptionPushOrder @default(SEQUENTIAL)
   status       LearningSubscriptionStatus @default(ACTIVE)
   editionPointIds String[]        @default([])
   generation   Int               @default(0)

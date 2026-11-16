@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { SubscriptionPolicyFields } from "@/components/bank/subscription-policy-fields";
-import type { LearningSubscriptionMode } from "@/types";
+import type { LearningSubscriptionMode, SubscriptionPushOrder } from "@/types";
 import { CalendarClock, Search } from "lucide-react";
 import { formatSubscriptionSchedule } from "@/lib/subscriptions/schedule";
 import {
@@ -43,6 +43,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
   const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
   const [pushTimes, setPushTimes] = useState<string[]>([...DEFAULT_PUSH_TIMES]);
   const [mode, setMode] = useState<LearningSubscriptionMode>("CURRENT_EDITION");
+  const [pushOrder, setPushOrder] = useState<SubscriptionPushOrder>("SEQUENTIAL");
   const [newTime, setNewTime] = useState("");
   const [subscribing, setSubscribing] = useState(false);
 
@@ -119,6 +120,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
         body: JSON.stringify({
           bankId: selectedBank.id,
           mode,
+          pushOrder,
           ...(!selectedUsesFixedSchedule ? { pushTimes } : {}),
         }),
       });
@@ -158,7 +160,7 @@ export function BankSelector({ groupId, onSuccess }: BankSelectorProps) {
           </div>
         </div>
 
-        <SubscriptionPolicyFields mode={mode} onModeChange={setMode} disabled={subscribing} />
+        <SubscriptionPolicyFields mode={mode} onModeChange={setMode} pushOrder={pushOrder} onPushOrderChange={setPushOrder} disabled={subscribing} />
         {!selectedUsesFixedSchedule && (
           <div className="space-y-2">
             <Label>推送时间</Label>

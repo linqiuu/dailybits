@@ -8,9 +8,12 @@ import { validatePushConfiguration } from "../lib/push/adapter.js";
 import { dateKey } from "../lib/time.js";
 import { syncAnswerEvents } from "../lib/qa-events.js";
 import { enrichAnswerIdentities } from "../lib/answers/identity.js";
+import { validatePublicUrlConfiguration } from "../lib/push/subscription-management.js";
 
 const missing = validatePushConfiguration();
 if (missing.length) throw new Error(`Scheduler configuration missing: ${missing.join(", ")}`);
+validatePublicUrlConfiguration();
+if (!process.env.APP_PUBLIC_URL?.trim()) console.warn("[Scheduler] APP_PUBLIC_URL is not configured; subscription management links will be omitted");
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 const timezone = process.env.SCHEDULER_TIMEZONE || "Asia/Shanghai";
 const calendar = new Holidays(process.env.HOLIDAY_COUNTRY || "CN");

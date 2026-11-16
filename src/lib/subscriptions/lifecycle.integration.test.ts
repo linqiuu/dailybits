@@ -27,7 +27,10 @@ async function fixture(latest = true) {
   const migrations = (await readdir(migrationsRoot))
     .filter((name) => /^\d/.test(name))
     .sort();
-  for (const name of latest ? migrations : migrations.slice(0, -1))
+  const boundary = migrations.indexOf("20261015090000_learning_subscription_policy");
+  assert.notEqual(boundary, -1);
+  const pendingMigrations = latest ? [] : migrations.slice(boundary);
+  for (const name of latest ? migrations : migrations.slice(0, boundary))
     await sql.query(
       await readFile(join(migrationsRoot, name, "migration.sql"), "utf8"),
     );
@@ -43,7 +46,7 @@ async function fixture(latest = true) {
   return {
     db,
     sql,
-    latest: join(migrationsRoot, migrations.at(-1)!, "migration.sql"),
+    pendingMigrations: pendingMigrations.map((name) => join(migrationsRoot, name, "migration.sql")),
     async close() {
       await db.$disconnect();
       await sql.query(`DROP SCHEMA "${schema}" CASCADE`);
@@ -91,6 +94,48 @@ test("group subscriptions isolate recipients, preserve ownership and reject rest
   }
 });
 
+test("delivery retries retain the original management URL and idempotent payload", { skip: !process.env.TEST_DATABASE_URL }, async () => {
+  const f = await fixture();
+  const previous = new Map(["APP_PUBLIC_URL", "PUSH_PROVIDER", "PUSH_API_URL"].map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  const sent: string[] = [];
+  try {
+    process.env.APP_PUBLIC_URL = "https://learning.example.test";
+    process.env.PUSH_PROVIDER = "generic";
+    process.env.PUSH_API_URL = "https://fixture.invalid/push";
+    globalThis.fetch = (async (_input, init) => {
+      sent.push(String(init?.body));
+      return new Response("{}", { status: sent.length === 1 ? 503 : 200 });
+    }) as typeof fetch;
+    const user = await f.db.user.create({ data: { uid: "management-fixture" } });
+    const bank = await f.db.questionBank.create({ data: { title: "管理链接测试", creatorId: user.id, visibility: "PUBLIC" } });
+    await f.db.question.create({ data: { bankId: bank.id, content: "Fixture", options: ["A", "B", "C", "D"], correctAnswer: "A", explanation: "Fixture", status: "PUBLISHED" } });
+    const sub = await createLearningSubscription(f.db, "QUESTION", { id: user.id, departmentIds: [] }, { bankId: bank.id, mode: "CURRENT_EDITION", targetType: "GROUP", targetId: "00123456" });
+    const now = new Date();
+    const job = await f.db.deliveryJob.create({ data: { dedupeKey: randomUUID(), kind: "QUESTION", subscriptionId: sub.id, subscriptionGeneration: sub.generation, targetType: "GROUP", targetId: "00123456", scheduleDate: "2026-11-02", pushTime: "09:30", scheduledAt: now, expiresAt: new Date(now.getTime() + 3600000) } });
+    await drainDeliveryJobs(f.db, "Asia/Shanghai", "QUESTION");
+    assert.equal(sent.length, 1);
+    const pending = await f.db.deliveryJob.findUniqueOrThrow({ where: { id: job.id } });
+    assert.equal(pending.status, "PENDING");
+    const stored = pending.payload as { payload: { title: string; domain: string; subscriptionManageUrl: string } };
+    assert.equal(stored.payload.title, bank.title);
+    assert.equal(stored.payload.domain, bank.title);
+    assert.equal(stored.payload.subscriptionManageUrl, "https://learning.example.test/group/00123456?tab=subscriptions");
+    process.env.APP_PUBLIC_URL = "https://changed.example.test";
+    await updateLearningSubscription(f.db, "QUESTION", sub.id, { id: user.id, departmentIds: [] }, { pushOrder: "RANDOM" });
+    await f.db.deliveryJob.update({ where: { id: job.id }, data: { nextAttemptAt: new Date(Date.now() - 1000) } });
+    await drainDeliveryJobs(f.db, "Asia/Shanghai", "QUESTION");
+    assert.equal(sent.length, 2);
+    assert.deepEqual(JSON.parse(sent[0]), JSON.parse(sent[1]));
+    assert.equal(JSON.parse(sent[1]).title, `${bank.title} -- [订阅管理](https://learning.example.test/group/00123456?tab=subscriptions)`);
+    assert.equal((await f.db.deliveryJob.findUniqueOrThrow({ where: { id: job.id } })).status, "ACCEPTED");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of previous) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    await f.close();
+  }
+});
+
 test(
   "legacy migration freezes active editions and never revives inactive subscriptions",
   { skip: !process.env.TEST_DATABASE_URL },
@@ -105,7 +150,7 @@ test(
       INSERT INTO "KnowledgeBank" (id, title, "creatorId", "updatedAt") VALUES ('legacy-knowledge', 'Fixture', 'legacy-user', now());
       INSERT INTO "KnowledgeSubscription" (id, "targetId", "bankId", "isActive", "updatedAt") VALUES ('legacy-knowledge-stopped', 'legacy-user', 'legacy-knowledge', false, now());
       INSERT INTO "DeliveryJob" (id, "dedupeKey", kind, "subscriptionId", "targetType", "targetId", "scheduleDate", "pushTime", "scheduledAt", "expiresAt", "updatedAt") VALUES ('legacy-job', 'legacy-key', 'QUESTION', 'legacy-active', 'USER', 'legacy-user', '2026-10-14', '09:30', now(), now() + interval '1 hour', now());`);
-      await f.sql.query(await readFile(f.latest, "utf8"));
+      for (const migration of f.pendingMigrations) await f.sql.query(await readFile(migration, "utf8"));
       const active = await f.db.subscription.findUniqueOrThrow({
         where: { id: "legacy-active" },
       });
@@ -216,6 +261,75 @@ test(
       return db.deliveryJob.findUniqueOrThrow({ where: { id: job.id } });
     }
     try {
+      await suite.test("sequential defaults follow the visible question and knowledge order", async () => {
+        const b = await bank();
+        const first = await question(b.id);
+        const second = await question(b.id);
+        await db.question.update({ where: { id: first.id }, data: { createdAt: new Date("2026-01-01T00:00:00Z") } });
+        await db.question.update({ where: { id: second.id }, data: { createdAt: new Date("2026-01-02T00:00:00Z") } });
+        const sub = await createLearningSubscription(db, "QUESTION", actor, { bankId: b.id, targetType: "GROUP", targetId: "901001" });
+        assert.equal(sub.pushOrder, "SEQUENTIAL");
+        assert.equal((await selectLearningQuestion(db, await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })))?.question.id, first.id);
+        assert.equal((await deliver(sub.id)).status, "ACCEPTED");
+        assert.equal((await selectLearningQuestion(db, await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })))?.question.id, second.id);
+        const kb = await db.knowledgeBank.create({ data: { title: "Ordered knowledge", creatorId: actor.id, visibility: "PUBLIC" } });
+        const last = await db.knowledgePoint.create({ data: { bankId: kb.id, orderIndex: 9, content: "Last" } });
+        const start = await db.knowledgePoint.create({ data: { bankId: kb.id, orderIndex: 0, content: "First" } });
+        const ks = await createLearningSubscription(db, "KNOWLEDGE", actor, { bankId: kb.id, mode: "CURRENT_EDITION", targetType: "GROUP", targetId: "901001" });
+        assert.equal(ks.pushOrder, "SEQUENTIAL");
+        assert.equal((await selectLearningKnowledge(db, await db.knowledgeSubscription.findUniqueOrThrow({ where: { id: ks.id } })))?.id, start.id);
+        assert.equal((await deliver(ks.id, "KNOWLEDGE")).status, "ACCEPTED");
+        assert.equal((await selectLearningKnowledge(db, await db.knowledgeSubscription.findUniqueOrThrow({ where: { id: ks.id } })))?.id, last.id);
+      });
+      await suite.test("random question delivery exhausts each frozen round once and stops", async () => {
+        const b = await bank();
+        const questions = await Promise.all(Array.from({ length: 5 }, () => question(b.id)));
+        const sub = await createLearningSubscription(db, "QUESTION", actor, { bankId: b.id, mode: "CURRENT_EDITION", pushOrder: "RANDOM", endCondition: "REPEAT_N_TIMES", repeatCount: 2, targetType: "GROUP", targetId: "901002" });
+        const extra = await question(b.id);
+        for (let index = 0; index < 10; index++) assert.equal((await deliver(sub.id)).status, "ACCEPTED");
+        for (const cycle of [0, 1]) {
+          const logs = await db.pushLog.findMany({ where: { subscriptionId: sub.id, cycle } });
+          assert.equal(logs.length, 5);
+          assert.deepEqual(new Set(logs.map((log) => log.questionId)), new Set(questions.map((q) => q.id)));
+          assert.ok(!logs.some((log) => log.questionId === extra.id));
+        }
+        const finished = await db.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+        assert.equal(finished.status, "COMPLETED");
+        assert.equal(await selectLearningQuestion(db, finished), null);
+        assert.equal((await deliver(sub.id)).status, "CANCELLED");
+      });
+      await suite.test("random knowledge delivery never repeats, and order edits retain history", async () => {
+        const kb = await db.knowledgeBank.create({ data: { title: "Random knowledge", creatorId: actor.id, visibility: "PUBLIC" } });
+        const points = await Promise.all(Array.from({ length: 4 }, (_, orderIndex) => db.knowledgePoint.create({ data: { bankId: kb.id, orderIndex, content: `Point ${orderIndex}` } })));
+        const sub = await createLearningSubscription(db, "KNOWLEDGE", actor, { bankId: kb.id, mode: "CURRENT_EDITION", targetType: "GROUP", targetId: "901003" });
+        const original = await db.knowledgeSubscription.findUniqueOrThrow({ where: { id: sub.id } });
+        assert.equal((await deliver(sub.id, "KNOWLEDGE")).status, "ACCEPTED");
+        const edited = await updateLearningSubscription(db, "KNOWLEDGE", sub.id, actor, { pushOrder: "RANDOM" });
+        assert.equal(edited.pushOrder, "RANDOM");
+        assert.equal(edited.generation, sub.generation);
+        assert.deepEqual((await db.knowledgeSubscription.findUniqueOrThrow({ where: { id: sub.id } })).editionPointIds, original.editionPointIds);
+        await assert.rejects(updateLearningSubscription(db, "KNOWLEDGE", sub.id, actor, { pushOrder: "random" }), { status: 400 });
+        for (let index = 0; index < 3; index++) assert.equal((await deliver(sub.id, "KNOWLEDGE")).status, "ACCEPTED");
+        const logs = await db.knowledgePushLog.findMany({ where: { subscriptionId: sub.id } });
+        assert.equal(logs.length, 4);
+        assert.deepEqual(new Set(logs.map((log) => log.knowledgePointId)), new Set(points.map((p) => p.id)));
+        assert.equal((await db.knowledgeSubscription.findUniqueOrThrow({ where: { id: sub.id } })).status, "COMPLETED");
+      });
+      await suite.test("fixed schedules allow order changes without resetting question progress", async () => {
+        const b = await bank();
+        await db.questionBank.update({ where: { id: b.id }, data: { subscriptionScheduleMode: "FIXED", subscriptionPushTimes: ["09:30"] } });
+        await question(b.id); await question(b.id);
+        const sub = await createLearningSubscription(db, "QUESTION", actor, { bankId: b.id, targetType: "GROUP", targetId: "901004" });
+        assert.equal((await deliver(sub.id)).status, "ACCEPTED");
+        const edited = await updateLearningSubscription(db, "QUESTION", sub.id, actor, { pushOrder: "RANDOM" }, "901004");
+        assert.equal(edited.pushOrder, "RANDOM");
+        assert.equal(edited.generation, sub.generation);
+        assert.deepEqual(await questionProgress(db, await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })), { questionCount: 2, pushedCount: 1 });
+        await assert.rejects(updateLearningSubscription(db, "QUESTION", sub.id, actor, { pushTimes: ["12:00"] }), { status: 400 });
+        assert.equal((await deliver(sub.id)).status, "ACCEPTED");
+        assert.equal((await db.subscription.findUniqueOrThrow({ where: { id: sub.id } })).status, "COMPLETED");
+        await assert.rejects(updateLearningSubscription(db, "QUESTION", sub.id, actor, { pushOrder: "SEQUENTIAL" }), { status: 409 });
+      });
     await suite.test("concurrent subscribe requests cannot create duplicate or bypass quota", async () => {
       const b = await bank(); await question(b.id);
       const body = { bankId: b.id, mode: "FOLLOW_UPDATES", targetType: "GROUP", targetId: "900001" };
@@ -298,6 +412,7 @@ test(
           const sub = await createLearningSubscription(db, "QUESTION", actor, {
             bankId: b.id,
             mode: "FOLLOW_UPDATES",
+            pushOrder: "RANDOM",
           });
           await deliver(sub.id);
           let live = await db.subscription.findUniqueOrThrow({

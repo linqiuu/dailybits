@@ -9,6 +9,7 @@ import {
 import {
   parseLearningMode,
   parseLearningPolicy,
+  parsePushOrder,
   RESERVED_STATUSES,
   SubscriptionPolicyError,
 } from "./policy";
@@ -179,6 +180,7 @@ export async function createLearningSubscription(
     const common = {
       ...target,
       mode: policy.mode,
+      pushOrder: parsePushOrder(body.pushOrder),
       status: "ACTIVE" as const,
       isActive: true,
       completedAt: null,
@@ -278,6 +280,7 @@ export async function updateLearningSubscription(
       isActive?: boolean;
       startedAt?: Date;
       pushTimes?: string[];
+      pushOrder?: "SEQUENTIAL" | "RANDOM";
     } = {};
     const review: Pick<
       Prisma.SubscriptionUpdateInput,
@@ -315,7 +318,8 @@ export async function updateLearningSubscription(
         body.pushTimes === undefined &&
         body.endCondition === undefined &&
         body.repeatCount === undefined &&
-        body.mode === undefined
+        body.mode === undefined &&
+        body.pushOrder === undefined
       )
         throw new SubscriptionPolicyError("未提供需要修改的设置");
       if (body.pushTimes !== undefined) {
@@ -331,6 +335,7 @@ export async function updateLearningSubscription(
           throw new SubscriptionPolicyError(getPushTimeLimitMessage());
         common.pushTimes = times;
       }
+      if (body.pushOrder !== undefined) common.pushOrder = parsePushOrder(body.pushOrder);
       if (kind === "QUESTION" && "endCondition" in sub) {
         const policy = parseLearningPolicy(body, sub);
         Object.assign(review, {

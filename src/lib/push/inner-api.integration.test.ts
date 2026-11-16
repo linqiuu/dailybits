@@ -23,7 +23,7 @@ test("Directory and paged Messaging against the local Inner API Mock", { skip: !
       keys.push(new Headers(init?.headers).get("Idempotency-Key")!);
       return originalFetch(input, init);
     }) as typeof fetch;
-    const payload = { receiver: "a1234555", title: "Integration fixture", items: ["Fixture 1\n\nFixture 2\n\nFixture 3", "Fixture 4"], digestType: "AI_NEWS" as const, digestDate: "2026-10-13", idempotencyKey: randomUUID() };
+    const payload = { receiver: "a1234555", title: "Integration fixture", items: ["Fixture 1\n\nFixture 2\n\nFixture 3", "Fixture 4"], digestType: "AI_NEWS" as const, digestDate: "2026-10-13", idempotencyKey: randomUUID(), subscriptionManageUrl: "https://learning.example.test/dashboard" };
     const first = await sendToTarget(payload);
     const replay = await sendToTarget(payload);
     assert.equal(first.ok, true);

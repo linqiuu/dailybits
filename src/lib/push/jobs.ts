@@ -10,6 +10,7 @@ import { isWorkingDay } from "../subscriptions/workdays";
 import { atZonedTime, dateKey } from "../time";
 import { sendToTarget, type AnyPushPayload, type PushResult } from "./adapter";
 import { buildPayload } from "./payload";
+import { withSubscriptionManagement } from "./subscription-management";
 
 type StoredPayload = { payload: AnyPushPayload; cycle?: number; generation?: number };
 export const DELIVERY_WINDOW_MS = () => Math.max(1, Math.min(1440, Number(process.env.SCHEDULER_CATCH_UP_MINUTES) || 360)) * 60000;
@@ -97,7 +98,7 @@ async function preparePayload(prisma: PrismaClient, job: DeliveryJob, timezone: 
     }
     const { question, cycle } = selected;
     await prisma.subscription.updateMany({ where: { id: sub.id, generation: sub.generation, ...runnableSubscriptionWhere }, data: { status: "ACTIVE" } });
-    return { payload: { ...buildPayload(receiver, sub.bank.title, question, { authorId: sub.bank.creatorId, businessId: question.id, domain: sub.bank.title }), idempotencyKey: job.dedupeKey }, cycle, generation: sub.generation };
+    return { payload: withSubscriptionManagement({ ...buildPayload(receiver, sub.bank.title, question, { authorId: sub.bank.creatorId, businessId: question.id, domain: sub.bank.title }), idempotencyKey: job.dedupeKey }, job.targetType, job.targetId), cycle, generation: sub.generation };
   }
   if (job.kind === "KNOWLEDGE") {
     const sub = await prisma.knowledgeSubscription.findUnique({ where: { id: job.subscriptionId }, include: { bank: true } });
@@ -106,7 +107,7 @@ async function preparePayload(prisma: PrismaClient, job: DeliveryJob, timezone: 
     const point = await selectLearningKnowledge(prisma, sub);
     if (!point) { await settleKnowledgeSubscription(prisma, sub.id, sub.generation); return null; }
     await prisma.knowledgeSubscription.updateMany({ where: { id: sub.id, generation: sub.generation, ...runnableSubscriptionWhere }, data: { status: "ACTIVE" } });
-    return { payload: { receiver, title: sub.bank.title, items: [point.content], knowledgeBankId: sub.bankId, knowledgePointId: point.id, idempotencyKey: job.dedupeKey }, generation: sub.generation };
+    return { payload: withSubscriptionManagement({ receiver, title: sub.bank.title, items: [point.content], knowledgeBankId: sub.bankId, knowledgePointId: point.id, idempotencyKey: job.dedupeKey }, job.targetType, job.targetId), generation: sub.generation };
   }
   const sub = await prisma.digestSubscription.findUnique({ where: { id: job.subscriptionId } });
   if (!sub?.isActive || !isDeliverableDigestType(sub.digestType)) return null;
@@ -114,7 +115,7 @@ async function preparePayload(prisma: PrismaClient, job: DeliveryJob, timezone: 
   const contentDate = sub.digestType === "AI_NEWS" ? getAiNewsDigestCacheDate(job.scheduledAt, timezone) : job.scheduleDate;
   const items = await getDigestItemsForDate(prisma, sub.digestType, contentDate);
   if (!items.length) throw new Error("CONTENT_TEMPORARILY_UNAVAILABLE");
-  return { payload: { receiver, title: sub.digestType === "AI_NEWS" ? "AI 新闻日报" : "GitHub 热榜日报", items, digestType: sub.digestType, digestDate: contentDate, idempotencyKey: job.dedupeKey } };
+  return { payload: withSubscriptionManagement({ receiver, title: sub.digestType === "AI_NEWS" ? "AI 新闻日报" : "GitHub 热榜日报", items, digestType: sub.digestType, digestDate: contentDate, idempotencyKey: job.dedupeKey }, job.targetType, job.targetId) };
 }
 
 async function stillActive(prisma: PrismaClient, job: DeliveryJob, stored: StoredPayload): Promise<boolean> {

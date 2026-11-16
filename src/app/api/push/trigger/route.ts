@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { selectLearningQuestion, settleQuestionSubscription } from "@/lib/subscriptions/lifecycle";
 import { pushToTarget } from "@/lib/push/adapter";
 import { buildPayload } from "@/lib/push/payload";
+import { withSubscriptionManagement } from "@/lib/push/subscription-management";
 import { getCurrentSession, isAdminSession } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
       receiver = user.uid;
     }
 
-    const payload = buildPayload(receiver, subscription.bank.title, question, { authorId: subscription.bank.creatorId, businessId: question.id });
+    const payload = withSubscriptionManagement(buildPayload(receiver, subscription.bank.title, question, { authorId: subscription.bank.creatorId, businessId: question.id }), subscription.targetType, subscription.targetId);
     const success = await pushToTarget(payload);
 
     if (success) {

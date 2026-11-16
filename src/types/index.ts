@@ -3,6 +3,7 @@ export type DigestType = "GITHUB_TRENDING" | "AI_NEWS" | "ARXIV_AI_PAPERS";
 export type SubscriptionScheduleMode = "CUSTOM" | "FIXED";
 export type SubscriptionCadence = "DAILY" | "WEEKLY";
 export type LearningSubscriptionMode = "CURRENT_EDITION" | "FOLLOW_UPDATES";
+export type SubscriptionPushOrder = "SEQUENTIAL" | "RANDOM";
 export type LearningSubscriptionStatus = "ACTIVE" | "WAITING" | "COMPLETED" | "PAUSED" | "CANCELLED";
 
 export const MAX_SUBSCRIPTIONS_PER_TARGET = 5;
@@ -36,6 +37,7 @@ export interface PushPayload {
   domain?: string;
   scene?: string;
   idempotencyKey?: string;
+  subscriptionManageUrl?: string;
 }
 
 export interface DigestPushPayload {
@@ -45,6 +47,7 @@ export interface DigestPushPayload {
   digestType: DigestType;
   digestDate: string;
   idempotencyKey?: string;
+  subscriptionManageUrl?: string;
 }
 
 export interface KnowledgePushPayload {
@@ -54,4 +57,5 @@ export interface KnowledgePushPayload {
   knowledgeBankId: string;
   knowledgePointId: string;
   idempotencyKey?: string;
+  subscriptionManageUrl?: string;
 }

@@ -9,12 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { learningModeLabels } from "@/lib/subscriptions/policy";
-import type { LearningSubscriptionMode } from "@/types";
+import { learningModeLabels, pushOrderLabels } from "@/lib/subscriptions/policy";
+import type { LearningSubscriptionMode, SubscriptionPushOrder } from "@/types";
 
 export function SubscriptionPolicyFields({
   mode,
   onModeChange,
+  pushOrder = "SEQUENTIAL",
+  onPushOrderChange,
   endCondition = "END_AFTER_COMPLETE",
   repeatCount = 0,
   onReviewChange,
@@ -24,6 +26,8 @@ export function SubscriptionPolicyFields({
 }: {
   mode: LearningSubscriptionMode;
   onModeChange: (mode: LearningSubscriptionMode) => void;
+  pushOrder?: SubscriptionPushOrder;
+  onPushOrderChange?: (order: SubscriptionPushOrder) => void;
   endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
   repeatCount?: number;
   onReviewChange?: (
@@ -61,6 +65,21 @@ export function SubscriptionPolicyFields({
           </SelectContent>
         </Select>
       </div>
+      {onPushOrderChange ? (
+        <div className="space-y-2">
+          <Label htmlFor={id + "-order"}>推送顺序</Label>
+          <Select value={pushOrder} disabled={disabled} onValueChange={(value) => {
+            if (value === "SEQUENTIAL" || value === "RANDOM") onPushOrderChange(value);
+          }}>
+            <SelectTrigger id={id + "-order"} aria-label="推送顺序" className="w-full">
+              <SelectValue>{pushOrderLabels[pushOrder]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(pushOrderLabels).map(([value, text]) => <SelectItem key={value} value={value}>{text}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
       {mode === "CURRENT_EDITION" && onReviewChange && (
         <div className="space-y-2">
           <Label htmlFor={id + "-reviews"}>额外复习轮数</Label>

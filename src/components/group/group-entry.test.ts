@@ -15,7 +15,7 @@ test("group entry validates strings before navigation and exposes accessible err
 });
 
 test("switching groups remounts target state and only authenticated users load group content", () => {
-  assert.match(source("app/group/[groupId]/page.tsx"), /<GroupDashboard key=\{groupId\}/);
+  assert.match(source("app/group/[groupId]/page.tsx"), /<GroupDashboard key=\{groupId \+ initialTab\}/);
   const dashboard = source("components/group/group-dashboard.tsx");
   assert.match(dashboard, /status === "authenticated" \? <GroupContent key=\{groupId\}/);
   assert.match(dashboard, /<BankExplorer targetType="GROUP" targetId=\{groupId\}/);
@@ -23,6 +23,7 @@ test("switching groups remounts target state and only authenticated users load g
   assert.match(dashboard, /<DigestSubscriptionList targetType="GROUP" targetId=\{groupId\}/);
   assert.match(dashboard, /if \(!response\.ok\) throw/);
   assert.match(dashboard, /failed \? \([\s\S]*<RequestState/);
+  assert.match(dashboard, /<Tabs defaultValue=\{initialTab\}/);
 });
 
 test("group subscription actions identify the recipient instead of silently using personal endpoints", () => {

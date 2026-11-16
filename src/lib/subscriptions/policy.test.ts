@@ -3,9 +3,17 @@ import test from "node:test";
 import {
   parseLearningPolicy,
   parseLearningMode,
+  parsePushOrder,
   SubscriptionPolicyError,
 } from "./policy";
 import { parseQuestionBankSchedule } from "./schedule";
+
+test("push order defaults to sequential and rejects unsupported values", () => {
+  assert.equal(parsePushOrder(undefined), "SEQUENTIAL");
+  assert.equal(parsePushOrder("SEQUENTIAL"), "SEQUENTIAL");
+  assert.equal(parsePushOrder("RANDOM"), "RANDOM");
+  for (const value of [null, "random", "", 1, {}, []]) assert.throws(() => parsePushOrder(value), SubscriptionPolicyError);
+});
 
 test("learning modes, review counts and creator recommendations are independent", () => {
   assert.equal(

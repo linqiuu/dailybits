@@ -64,7 +64,7 @@ function useGroupSubscriptions(endpoint: string) {
   return { subscriptions, loading, failed, refresh };
 }
 
-export function GroupDashboard({ groupId }: { groupId: string }) {
+export function GroupDashboard({ groupId, initialTab = "banks" }: { groupId: string; initialTab?: "banks" | "subscriptions" | "digests" }) {
   const { status } = useSession();
   return (
     <div className="page-enter space-y-6">
@@ -78,17 +78,17 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         </div>
         <GroupEntryDialog groupId={groupId} />
       </header>
-      {status === "authenticated" ? <GroupContent key={groupId} groupId={groupId} /> : <AuthenticationState />}
+      {status === "authenticated" ? <GroupContent key={groupId} groupId={groupId} initialTab={initialTab} /> : <AuthenticationState />}
     </div>
   );
 }
 
-function GroupContent({ groupId }: { groupId: string }) {
+function GroupContent({ groupId, initialTab }: { groupId: string; initialTab: "banks" | "subscriptions" | "digests" }) {
   const { data: session } = useSession();
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">仅展示可推送到群的公开内容，个人订阅不受影响。</p>
-      <Tabs defaultValue="banks">
+      <Tabs defaultValue={initialTab}>
         <TabsList variant="line" className="h-11 gap-5">
           <TabsTrigger value="banks"><BookOpenCheck className="size-4" aria-hidden />题库</TabsTrigger>
           <TabsTrigger value="knowledge"><BookMarked className="size-4" aria-hidden />知识卡片</TabsTrigger>

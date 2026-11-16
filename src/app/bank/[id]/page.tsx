@@ -20,7 +20,7 @@ export default async function BankDetailPage({ params }: PageProps) {
         select: { id: true, name: true, image: true, uid: true },
       },
       questions: {
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
       _count: {
         select: { questions: true },

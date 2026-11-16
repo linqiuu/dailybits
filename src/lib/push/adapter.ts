@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { internalFetch } from "../http/outbound";
+import { formatPushTitle } from "./subscription-management";
 import type { DigestPushPayload, KnowledgePushPayload, PushPayload } from "../../types";
 
 export type AnyPushPayload = PushPayload | DigestPushPayload | KnowledgePushPayload;
@@ -18,6 +19,7 @@ type CardServiceQaRequest = {
   choices: Record<"a" | "b" | "c" | "d", string>;
   analysis: string;
   scene?: string;
+  subscriptionManageUrl?: string;
   source_system: string;
   business_id?: string;
   answerCallbackUrl?: string;
@@ -120,6 +122,7 @@ function buildCardServiceQaPayload(
     choices,
     analysis: payload.explanation,
     ...(payload.scene?.trim() ? { scene: payload.scene } : {}),
+    ...(payload.subscriptionManageUrl ? { subscriptionManageUrl: payload.subscriptionManageUrl } : {}),
     source_system: "dailybits",
     business_id: payload.businessId,
     ...(process.env.CARD_SERVICE_QA_ANSWER_CALLBACK_URL?.trim()
@@ -209,7 +212,7 @@ function buildDigestMessagingContent(payload: DigestPushPayload): string[] {
   return normalizeMessagingPages(
     pages.map((page, index) =>
       formatMessagingPage({
-        title: payload.title,
+        title: formatPushTitle(payload),
         body: page,
         footer: `${payload.digestDate} · ${index + 1}/${total}`,
       }),
@@ -228,7 +231,7 @@ function buildQuestionMessagingContent(payload: PushPayload): string {
 
   return truncateMarkdown(
     formatMessagingPage({
-      title: payload.title,
+      title: formatPushTitle(payload),
       body: [
         payload.question,
         "",
@@ -254,7 +257,7 @@ export function buildMessagingCardRequest(payload: AnyPushPayload): MessagingCar
   if (isKnowledgePayload(payload)) {
     const page = normalizeMessagingPages([
       formatMessagingPage({
-        title: payload.title,
+        title: formatPushTitle(payload),
         body: payload.items.join("\n\n"),
       }),
     ])[0];
@@ -372,7 +375,7 @@ async function pushGeneric(payload: AnyPushPayload): Promise<PushResult> {
   const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": messagingIdempotencyKey(payload) },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, title: formatPushTitle(payload) }),
   }, positiveIntegerEnv("PUSH_TIMEOUT_MS", 15000));
   return response.ok ? { ok: true, status: "accepted" } : failureResult(response);
   } catch {

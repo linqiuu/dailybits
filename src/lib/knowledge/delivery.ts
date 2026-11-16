@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 import type { KnowledgePushPayload, TargetType } from "../../types";
 import { pushToTarget } from "../push/adapter";
+import { withSubscriptionManagement } from "../push/subscription-management";
 import { selectLearningKnowledge, settleKnowledgeSubscription } from "../subscriptions/lifecycle";
 
 type KnowledgeSubscriptionForPush = Awaited<
@@ -102,7 +103,7 @@ export async function pushKnowledgeSubscription(
     sub.targetId,
   );
   const success = await pushKnowledgeToTarget(
-    buildKnowledgePushPayload({
+    withSubscriptionManagement(buildKnowledgePushPayload({
       receiver,
       title: sub.bank.title,
       content: point.content,
@@ -116,7 +117,7 @@ export async function pushKnowledgeSubscription(
         pushTime,
         point.id,
       ].join(":"),
-    }),
+    }), sub.targetType, sub.targetId),
   );
 
   if (!success) return false;

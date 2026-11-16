@@ -1,9 +1,20 @@
 import type {
   LearningSubscriptionMode,
   LearningSubscriptionStatus,
+  SubscriptionPushOrder,
 } from "../../types";
 
 export const LEARNING_MODES = ["CURRENT_EDITION", "FOLLOW_UPDATES"] as const;
+export const pushOrderLabels: Record<SubscriptionPushOrder, string> = {
+  SEQUENTIAL: "顺序推送",
+  RANDOM: "随机推送",
+};
+
+export function parsePushOrder(value: unknown, fallback: SubscriptionPushOrder = "SEQUENTIAL"): SubscriptionPushOrder {
+  if (value === undefined) return fallback;
+  if (value !== "SEQUENTIAL" && value !== "RANDOM") throw new SubscriptionPolicyError("推送顺序无效");
+  return value;
+}
 export const learningModeLabels: Record<LearningSubscriptionMode, string> = {
   CURRENT_EDITION: "学完本期结束",
   FOLLOW_UPDATES: "持续跟进更新",

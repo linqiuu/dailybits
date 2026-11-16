@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { DigestPushPayload, DigestType, TargetType } from "../../types";
 import { pushToTarget } from "../push/adapter";
+import { withSubscriptionManagement } from "../push/subscription-management";
 import { isDeliverableDigestType } from "./options";
 import { fetchDigestItems, getAiNewsDigestCacheDate, getDigestItemLimit } from "./sources";
 
@@ -263,7 +264,7 @@ export async function runDueDigestSubscriptions(
         sub.targetType as TargetType,
         sub.targetId,
       );
-      const success = await pushDigestToTarget({
+      const success = await pushDigestToTarget(withSubscriptionManagement({
         receiver,
         title: getDigestTitle(digestType),
         items,
@@ -278,7 +279,7 @@ export async function runDueDigestSubscriptions(
           scheduleDate,
           currentTime,
         ].join(":"),
-      });
+      }, sub.targetType, sub.targetId));
 
       if (success) {
         await prisma.digestPushLog.create({

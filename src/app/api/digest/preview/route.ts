@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { parseCachedItems } from "@/lib/digest/delivery";
 import { getAiNewsDigestCacheDate } from "@/lib/digest/sources";
 import { buildMessagingCardRequest } from "@/lib/push/adapter";
+import { withSubscriptionManagement } from "@/lib/push/subscription-management";
 import { dateKey } from "@/lib/time";
 
 export async function GET(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       const bank = await prisma.knowledgeBank.findUnique({ where: { id: bankId }, include: { points: { orderBy: { orderIndex: "asc" }, take: 1 } } });
       if (!bank || !canAccessBank(bank, session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const point = bank.points[0];
-      const card = point ? buildMessagingCardRequest({ receiver, title: bank.title, items: [point.content], knowledgeBankId: bank.id, knowledgePointId: point.id }) : null;
+      const card = point ? buildMessagingCardRequest(withSubscriptionManagement({ receiver, title: bank.title, items: [point.content], knowledgeBankId: bank.id, knowledgePointId: point.id }, "USER", session.user.id)) : null;
       return NextResponse.json({ banks, selectedBankId: bank.id, title: bank.title, pages: card ? [card.content] : [], fetchedAt: point?.updatedAt ?? null });
     }
     if (kind !== "AI_NEWS" && kind !== "GITHUB_TRENDING") return NextResponse.json({ error: "Invalid preview type" }, { status: 400 });
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const cache = await prisma.digestCache.findUnique({ where: { digestType_digestDate: { digestType: kind, digestDate } } });
     const items = parseCachedItems(cache?.items);
     const title = kind === "AI_NEWS" ? "AI 新闻日报" : "GitHub 热榜日报";
-    const card = items ? buildMessagingCardRequest({ receiver, title, items, digestType: kind, digestDate }) : null;
+    const card = items ? buildMessagingCardRequest(withSubscriptionManagement({ receiver, title, items, digestType: kind, digestDate }, "USER", session.user.id)) : null;
     return NextResponse.json({ title, digestDate, pages: card?.content ?? [], fetchedAt: cache?.fetchedAt ?? null });
   } catch {
     return NextResponse.json({ error: "Preview temporarily unavailable" }, { status: 503 });

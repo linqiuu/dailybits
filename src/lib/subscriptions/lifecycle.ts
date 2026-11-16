@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type {
   Prisma,
   PrismaClient,
@@ -41,13 +42,14 @@ export async function selectLearningQuestion(db: Database, sub: Subscription) {
     return null;
   let cycle = sub.currentCycle;
   async function next() {
-    return db.question.findFirst({
-      where: {
-        ...questionScope(sub),
-        pushLogs: { none: questionHistoryWhere(sub, cycle) },
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    });
+    const where = { ...questionScope(sub), pushLogs: { none: questionHistoryWhere(sub, cycle) } };
+    const orderBy = [{ createdAt: "asc" }, { id: "asc" }] as const;
+    if (sub.pushOrder !== "RANDOM") return db.question.findFirst({ where, orderBy: [...orderBy] });
+    const count = await db.question.count({ where });
+    if (!count) return null;
+    const question = await db.question.findFirst({ where, orderBy: [...orderBy], skip: randomInt(count) });
+    // A concurrent deletion can invalidate the offset, but must not end a nonempty edition.
+    return question ?? db.question.findFirst({ where, orderBy: [...orderBy] });
   }
   let question = await next();
   if (
@@ -115,16 +117,17 @@ export async function selectLearningKnowledge(
     !RUNNABLE_STATUSES.includes(sub.status as "ACTIVE" | "WAITING")
   )
     return null;
-  return db.knowledgePoint.findFirst({
-    where: {
-      bankId: sub.bankId,
-      ...(sub.mode === "CURRENT_EDITION"
-        ? { id: { in: sub.editionPointIds } }
-        : {}),
-      pushLogs: { none: knowledgeHistoryWhere(sub) },
-    },
-    orderBy: [{ orderIndex: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-  });
+  const where = {
+    bankId: sub.bankId,
+    ...(sub.mode === "CURRENT_EDITION" ? { id: { in: sub.editionPointIds } } : {}),
+    pushLogs: { none: knowledgeHistoryWhere(sub) },
+  };
+  const orderBy = [{ orderIndex: "asc" }, { createdAt: "asc" }, { id: "asc" }] as const;
+  if (sub.pushOrder !== "RANDOM") return db.knowledgePoint.findFirst({ where, orderBy: [...orderBy] });
+  const count = await db.knowledgePoint.count({ where });
+  if (!count) return null;
+  const point = await db.knowledgePoint.findFirst({ where, orderBy: [...orderBy], skip: randomInt(count) });
+  return point ?? db.knowledgePoint.findFirst({ where, orderBy: [...orderBy] });
 }
 export async function settleKnowledgeSubscription(
   db: Database,

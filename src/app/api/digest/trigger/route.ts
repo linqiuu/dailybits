@@ -13,6 +13,7 @@ import {
   resolveDigestReceiver,
 } from "@/lib/digest/delivery";
 import type { DigestType, TargetType } from "@/types";
+import { withSubscriptionManagement } from "@/lib/push/subscription-management";
 
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV !== "development") {
@@ -76,13 +77,13 @@ export async function POST(request: NextRequest) {
       subscription.targetType as TargetType,
       subscription.targetId,
     );
-    const success = await pushDigestToTarget({
+    const success = await pushDigestToTarget(withSubscriptionManagement({
       receiver,
       title: digestType === "AI_NEWS" ? "AI News Daily" : "GitHub Trending Daily",
       items,
       digestType,
       digestDate,
-    });
+    }, subscription.targetType, subscription.targetId));
 
     if (!success) {
       return NextResponse.json({ error: "Digest push failed" }, { status: 500 });

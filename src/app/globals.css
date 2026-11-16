@@ -180,8 +180,9 @@
 
   .workbench-panel { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: none; }
   .page-hero { min-width: 0; padding: 0 0 1.35rem; border-bottom: 1px solid var(--foreground); }
-  .editor-hero { color: white; padding: 1.35rem !important; border: 0; background: var(--surface-night); }
-  .editor-hero p { color: rgb(255 255 255 / 0.62); }
+  .editor-hero { color: var(--foreground); padding: 1.35rem !important; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+  .editor-hero h1 { color: var(--foreground); }
+  .editor-hero p { color: var(--muted-foreground); }
   .panel-title { font-weight: 700; color: var(--foreground); }
   .metric-strip { display: grid; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
   .metric-cell { min-width: 0; padding: 1rem; background: transparent; }

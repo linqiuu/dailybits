@@ -23,6 +23,7 @@ import {
 import {
   learningModeLabels,
   learningStatusLabels,
+  pushOrderLabels,
 } from "@/lib/subscriptions/policy";
 import {
   DEFAULT_PUSH_TIMES,
@@ -31,6 +32,7 @@ import {
   type LearningSubscriptionStatus,
   type SubscriptionCadence,
   type SubscriptionScheduleMode,
+  type SubscriptionPushOrder,
 } from "@/types";
 
 export interface SubscriptionSummary {
@@ -38,6 +40,7 @@ export interface SubscriptionSummary {
   pushTimes: string[];
   isActive: boolean;
   mode: LearningSubscriptionMode;
+  pushOrder?: SubscriptionPushOrder;
   status: LearningSubscriptionStatus;
   endCondition?: "END_AFTER_COMPLETE" | "REPEAT_N_TIMES";
   repeatCount?: number;
@@ -82,6 +85,7 @@ export function SubscriptionPanel({
   const [mode, setMode] = useState(
     initialSubscription?.mode ?? recommendedMode,
   );
+  const [pushOrder, setPushOrder] = useState<SubscriptionPushOrder>(initialSubscription?.pushOrder ?? "SEQUENTIAL");
   const [endCondition, setEndCondition] = useState(
     initialSubscription?.endCondition ?? "END_AFTER_COMPLETE",
   );
@@ -111,6 +115,7 @@ export function SubscriptionPanel({
       setSubscription(initialSubscription);
       setPushTimes(initialSubscription?.pushTimes ?? [...DEFAULT_PUSH_TIMES]);
       setMode(initialSubscription?.mode ?? recommendedMode);
+      setPushOrder(initialSubscription?.pushOrder ?? "SEQUENTIAL");
       setEndCondition(
         initialSubscription?.endCondition ?? "END_AFTER_COMPLETE",
       );
@@ -122,6 +127,7 @@ export function SubscriptionPanel({
     if (open && subscription) {
       setPushTimes(subscription.pushTimes);
       setMode(subscription.mode);
+      setPushOrder(subscription.pushOrder ?? "SEQUENTIAL");
       setEndCondition(subscription.endCondition ?? "END_AFTER_COMPLETE");
       setRepeatCount(subscription.repeatCount ?? 0);
     }
@@ -142,6 +148,7 @@ export function SubscriptionPanel({
           body: JSON.stringify({
             ...(!editing ? { bankId, targetType, targetId } : {}),
             mode,
+            pushOrder,
             ...(!fixed ? { pushTimes } : {}),
             ...(kind === "QUESTION" ? { endCondition, repeatCount } : {}),
           }),
@@ -204,6 +211,8 @@ export function SubscriptionPanel({
     <SubscriptionPolicyFields
       mode={mode}
       onModeChange={setMode}
+      pushOrder={pushOrder}
+      onPushOrderChange={setPushOrder}
       endCondition={endCondition}
       repeatCount={repeatCount}
       onReviewChange={
@@ -310,7 +319,7 @@ export function SubscriptionPanel({
         {current ? (
           <>
             <div className="flex flex-wrap justify-between gap-2 text-sm">
-              <span>{learningModeLabels[subscription.mode]}</span>
+              <span>{learningModeLabels[subscription.mode]} · {pushOrderLabels[subscription.pushOrder ?? "SEQUENTIAL"]}</span>
               <span className="tabular-nums text-muted-foreground">
                 {pushedCount} / {totalQuestions} {unit}
               </span>
@@ -323,9 +332,6 @@ export function SubscriptionPanel({
                 </p>
               )}
             <div className="flex flex-wrap gap-2">
-              {(!fixed ||
-                (kind === "QUESTION" &&
-                  subscription.mode === "CURRENT_EDITION")) && (
                 <Dialog open={editOpen} onOpenChange={openEditor}>
                   <DialogTrigger
                     render={
@@ -359,7 +365,6 @@ export function SubscriptionPanel({
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-              )}
               <Button
                 variant="outline"
                 size="sm"

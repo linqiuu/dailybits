@@ -78,22 +78,22 @@ export function KnowledgeDetailClient({
   return (
     <div className="space-y-5">
       <WorkbenchPanel className="editor-hero" padded={false}>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 p-0">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold">{bank.title}</h1>
+        <CardHeader className="flex min-w-0 flex-row flex-wrap items-start justify-between gap-4 p-0">
+          <div className="min-w-0 flex-1 space-y-2">
+            <h1 className="break-words text-2xl font-semibold">{bank.title}</h1>
             {bank.description ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="break-words text-sm leading-6 text-muted-foreground">
                 {bank.description}
               </p>
             ) : null}
-            <p className="text-sm text-muted-foreground">
+            <p className="break-words text-sm leading-6 text-muted-foreground">
               创建者：{bank.creator.name ?? "未知"}
               {bank.creator.uid ? ` (${bank.creator.uid})` : ""}，
               {bank.pointCount} 条， {bank.subscriberCount} 人订阅过
             </p>
           </div>
           {isCreator ? (
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               <Button
                 variant="outline"
                 size="sm"

@@ -111,6 +111,28 @@ test("QA requests omit empty scenes and preserve explicitly provided nonempty sc
   }
 });
 
+test("QA management links use a separate optional field, not domain or scene", async () => {
+  const previous = saveEnv(["PUSH_PROVIDER", "CARD_SERVICE_API_BASE", "CARD_SERVICE_SEND_API_KEY"]);
+  const originalFetch = globalThis.fetch;
+  let request: Record<string, unknown> = {};
+  try {
+    process.env.PUSH_PROVIDER = "card-service";
+    process.env.CARD_SERVICE_API_BASE = "http://127.0.0.1:10120";
+    process.env.CARD_SERVICE_SEND_API_KEY = "fixture-key";
+    globalThis.fetch = (async (_input, init) => {
+      request = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch;
+    assert.equal(await pushToTarget({ ...buildPayload("00123456", "原始题库名", { content: "测试问题", options: ["A", "B", "C", "D"], correctAnswer: "A", explanation: "解析" }), subscriptionManageUrl: "https://learning.test/group/00123456?tab=subscriptions" }), true);
+    assert.equal(request.domain, "原始题库名");
+    assert.equal(request.subscriptionManageUrl, "https://learning.test/group/00123456?tab=subscriptions");
+    assert.equal(Object.hasOwn(request, "scene"), false);
+  } finally {
+    restoreEnvMap(previous);
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("maps digest pushes to Messaging paged markdown cards", async () => {
   const originalEnv = saveEnv([
     "PUSH_PROVIDER",
